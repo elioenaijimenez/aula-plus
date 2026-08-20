@@ -118,7 +118,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
   let conicGradientString = '';
   if (opciones.length > 0) {
     const pedazo = 360 / opciones.length;
-    conicGradientString = opciones.map((op, i) => `${colores[i % colores.length]} ${i * pedazo}deg ${(i + 1) * pedazo}deg`).join(', ');
+    conicGradientString = opciones.map((_, i) => `${colores[i % colores.length]} ${i * pedazo}deg ${(i + 1) * pedazo}deg`).join(', ');
   }
 
   return (

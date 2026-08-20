@@ -26,7 +26,7 @@ interface StatsAlumno {
 }
 
 export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrupo: string, grupo: any, onVolver: () => void }) {
-  const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+
   const [diasRegistrados, setDiasRegistrados] = useState<DiaAsistencia[]>([]);
   const [cargando, setCargando] = useState(true);
   const [modo, setModo] = useState<'grupo' | 'alumno'>('grupo');
@@ -68,7 +68,7 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
       const snapA = await getDocs(qAlumnos);
       const listaA: Alumno[] = [];
       snapA.forEach(d => listaA.push({ id: d.id, ...d.data() } as Alumno));
-      setAlumnos(listaA);
+      
 
       const snapDias = await getDocs(collection(db, `groups/${idGrupo}/attendance`));
       const listaDias: DiaAsistencia[] = [];
