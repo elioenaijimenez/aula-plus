@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth, GoogleAuthProvider } from "firebase/auth"; // <-- 1. Importamos Autenticación
 
 // Tu configuración web de Firebase
 const firebaseConfig = {
@@ -16,3 +17,7 @@ const app = initializeApp(firebaseConfig);
 
 // Exportamos la conexión a Firestore para usarla en nuestros formularios
 export const db = getFirestore(app);
+
+// 2. Exportamos los servicios de Autenticación para usarlos en el Login
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { signInWithPopup } from 'firebase/auth'; // <- Importamos la función de ventana emergente
+import { db, auth, googleProvider } from '../services/firebase'; // <- Importamos nuestras herramientas
 import TutorialTooltip from './TutorialTooltip';
 
 export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin', user: any) => void }) {
@@ -14,10 +15,24 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   const [aceptoTerminos, setAceptoTerminos] = useState(false);
   const [cargando, setCargando] = useState(false);
 
-  const simularGoogleLogin = () => {
-    // Simula traer el correo de Google
-    setEmail('profesor@gmail.com');
-    setPaso(2);
+  // NUEVA FUNCIÓN: Inicio de sesión real con Google
+  const iniciarSesionGoogle = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      // Extraemos el correo real del usuario
+      setEmail(result.user.email || '');
+      
+      // Como un "bonus", autocompletamos el nombre si Google nos lo proporciona
+      if (result.user.displayName) {
+        setNombre(result.user.displayName);
+      }
+      
+      setPaso(2);
+    } catch (error) {
+      console.error("Error en autenticación:", error);
+      alert("No se pudo iniciar sesión con Google. Es posible que hayas cerrado la ventana emergente.");
+    }
   };
 
   const procesarIngreso = async (e: React.FormEvent) => {
@@ -117,7 +132,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         {paso === 1 ? (
           <div>
             <TutorialTooltip mensaje="Inicia sesión usando tu cuenta de Google para garantizar la seguridad de tu información." esBloque={true} posicion="top">
-              <button onClick={simularGoogleLogin} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'white', color: '#333', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button onClick={iniciarSesionGoogle} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'white', color: '#333', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                 <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google" width="20" />
                 Ingresar con Google
               </button>
