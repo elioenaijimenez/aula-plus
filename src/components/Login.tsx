@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth'; 
+import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth'; 
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
@@ -43,7 +43,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         if (user.displayName) setNombre(user.displayName);
 
         // Permitimos el acceso directo si es Super Administrador
-        if (userEmail === 'elioenai.jimenez@gmail.com' || userEmail === 'blaneguapo@gmail.com') { // CAMBIA ESTO POR TUS CORREOS REALES
+        if (userEmail === 'elioenai.jimenez@gmail.com' || userEmail === 'blaneguapo@gmail.com') { 
            onLogin('admin', { nombre: user.displayName || 'Admin', email: userEmail, telefono: '', keyPlus: 'SUPER-ADMIN-MASTER' });
            return;
         }
