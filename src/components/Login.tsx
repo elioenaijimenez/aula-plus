@@ -39,31 +39,41 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         setEmail(userEmail);
         if (user.displayName) setNombre(user.displayName);
 
-        // AQUÍ ESTABA EL ERROR: Ya corregí tu correo exacto
         if (userEmail === 'eliojimenezm@gmail.com' || userEmail === 'blaneguapo@gmail.com') { 
            onLogin('admin', { nombre: user.displayName || 'Admin', email: userEmail, telefono: '', keyPlus: 'SUPER-ADMIN-MASTER' });
            return;
         }
 
         try {
-          const q = query(collection(db, 'keys'), where('correo', '==', userEmail), where('estado', '==', 'en uso'));
+          // Buscamos CUALQUIER llave asociada a este correo (activa o caducada)
+          const q = query(collection(db, 'keys'), where('correo', '==', userEmail));
           const querySnapshot = await getDocs(q);
 
           if (!querySnapshot.empty) {
-            const docSnap = querySnapshot.docs[0];
-            const data = docSnap.data();
+            // Revisamos si alguna de sus llaves sigue 'en uso'
+            const llavesActivas = querySnapshot.docs.filter(d => d.data().estado === 'en uso');
             
-            const expira = new Date(data.fechaCaducidad);
-            expira.setMinutes(expira.getMinutes() + expira.getTimezoneOffset());
-            const hoy = new Date();
+            if (llavesActivas.length > 0) {
+              const docSnap = llavesActivas[0];
+              const data = docSnap.data();
+              
+              const expira = new Date(data.fechaCaducidad);
+              expira.setMinutes(expira.getMinutes() + expira.getTimezoneOffset());
+              const hoy = new Date();
 
-            if (hoy > expira) {
-              await updateDoc(doc(db, 'keys', docSnap.id), { estado: 'caducada' });
-              alert("Tu KeyPlus ha caducado. Ingresa una nueva licencia.");
+              if (hoy > expira) {
+                await updateDoc(doc(db, 'keys', docSnap.id), { estado: 'caducada' });
+                alert("⏳ Tu licencia KeyPlus ha expirado por tiempo.\nPor favor, contacta al Administrador para adquirir una nueva.");
+                setPaso(2);
+                setVerificandoSesion(false);
+              } else {
+                onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
+              }
+            } else {
+              // Tiene llaves, pero TODAS están caducadas/revocadas
+              alert("🛑 Acceso Denegado.\nTu licencia KeyPlus actual ha expirado o fue revocada por el Administrador. Ingresa una nueva licencia válida.");
               setPaso(2);
               setVerificandoSesion(false);
-            } else {
-              onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
             }
           } else {
             setPaso(2);
@@ -109,7 +119,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
-        alert("La KeyPlus ingresada no existe.");
+        alert("La KeyPlus ingresada no existe. Verifica los caracteres.");
         setCargando(false);
         return;
       }
@@ -135,8 +145,10 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         });
         onLogin('docente', { nombre, email, telefono, keyPlus });
 
-      } else {
-        alert("Esta KeyPlus ya está en uso, ha caducado o fue revocada.");
+      } else if (data.estado === 'caducada') {
+        alert("❌ Esta KeyPlus ya está caducada o fue revocada. No puede usarse.");
+      } else if (data.estado === 'en uso') {
+        alert("⚠️ Esta KeyPlus ya está siendo usada por otro docente.");
       }
     } catch (error) {
       alert("Hubo un problema al validar tu licencia.");
@@ -181,7 +193,11 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
           </div>
         ) : (
           <form onSubmit={procesarIngreso} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', animation: 'fadeIn 0.3s' }}>
-            <p style={{ color: 'var(--accent-green)', textAlign: 'center', margin: 0 }}>Autenticado como: <b>{email}</b></p>
+            <div style={{ backgroundColor: 'rgba(255, 77, 79, 0.1)', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--accent-red)', textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-main)', margin: '0 0 0.3rem 0', fontSize: '0.9rem' }}>Se requiere una licencia para la cuenta:</p>
+              <b style={{ color: 'var(--accent-red)', fontSize: '1.1rem' }}>{email}</b>
+            </div>
+            
             <input type="text" required placeholder="Nombre Completo" className="search-input" value={nombre} onChange={e => setNombre(e.target.value)} disabled={cargando} />
             <input type="tel" required placeholder="Teléfono Celular" className="search-input" value={telefono} onChange={e => setTelefono(e.target.value)} disabled={cargando} />
             <input type="text" required placeholder="Introduce tu KeyPlus" className="search-input" style={{ borderLeft: '4px solid var(--accent-yellow)' }} value={keyPlus} onChange={e => setKeyPlus(e.target.value)} disabled={cargando} />

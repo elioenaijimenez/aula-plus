@@ -14,7 +14,7 @@ interface Llave {
   telefono?: string;
   fechaActivacion?: string;
   fechaCaducidad?: string;
-  fechaRevocacion?: string; // Nuevo campo para el rastro de auditoría
+  fechaRevocacion?: string; 
   createdAt?: any; 
 }
 
@@ -65,14 +65,14 @@ export default function GestorLlaves() {
   };
 
   const revocarLlave = async (id: string) => {
-    if (window.confirm("¿Mandar esta llave a la Bóveda de Caducadas?")) {
+    if (window.confirm("¿Mandar esta llave a la Bóveda de Caducadas? Esto bloqueará inmediatamente el acceso del usuario.")) {
       try {
         const hoy = new Date();
         const fechaLocal = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
         
         await updateDoc(doc(db, 'keys', id), { 
           estado: 'caducada', 
-          fechaRevocacion: fechaLocal // Estampamos la fecha de la revocación
+          fechaRevocacion: fechaLocal 
         });
         
         setLlaves(llaves.map(l => l.id === id ? { ...l, estado: 'caducada', fechaRevocacion: fechaLocal } : l));
@@ -90,7 +90,8 @@ export default function GestorLlaves() {
 
   const llavesFiltradas = llaves.filter(l => 
     l.codigo.toLowerCase().includes(busqueda.toLowerCase()) || 
-    (l.usuario && l.usuario.toLowerCase().includes(busqueda.toLowerCase()))
+    (l.usuario && l.usuario.toLowerCase().includes(busqueda.toLowerCase())) ||
+    (l.correo && l.correo.toLowerCase().includes(busqueda.toLowerCase()))
   );
 
   const activas = llavesFiltradas.filter(l => l.estado !== 'caducada');
@@ -119,7 +120,7 @@ export default function GestorLlaves() {
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
       
-      {/* PANEL SUPERIOR: GENERADOR Y EXPORTACIÓN */}
+      {/* PANEL SUPERIOR */}
       <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)', display: 'flex', gap: '1.5rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '2rem' }}>
         <div style={{ flex: 1, minWidth: '200px' }}>
           <TutorialTooltip mensaje="Selecciona la duración de la licencia y genera un nuevo código único (KeyPlus) para dárselo a un docente." esBloque={true} posicion="bottom">
@@ -150,7 +151,7 @@ export default function GestorLlaves() {
         <TutorialTooltip mensaje="Busca rápidamente por el código de la llave o el nombre del maestro." esBloque={true} posicion="top">
           <input 
             type="text" 
-            placeholder="🔍 Buscar por código de llave o nombre de usuario..." 
+            placeholder="🔍 Buscar por código, usuario o correo..." 
             className="search-input" 
             value={busqueda} 
             onChange={e => setBusqueda(e.target.value)} 
@@ -171,7 +172,7 @@ export default function GestorLlaves() {
                   <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
                     <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Código</th>
                     <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Estado / Duración</th>
-                    <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Usuario (Contacto)</th>
+                    <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Usuario y Contacto</th>
                     <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Fechas y Alertas</th>
                     <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Acción</th>
                   </tr>
@@ -192,6 +193,7 @@ export default function GestorLlaves() {
                         </td>
                         <td style={{ padding: '0.8rem 0.5rem' }}>
                           <strong style={{ display: 'block', color: 'var(--text-main)' }}>{llave.usuario}</strong>
+                          {llave.correo && llave.correo !== '-' && <span style={{ fontSize: '0.85rem', color: 'var(--accent-blue)', display: 'block' }}>✉️ {llave.correo}</span>}
                           {llave.telefono && llave.telefono !== '-' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>📱 {llave.telefono}</span>}
                         </td>
                         <td style={{ padding: '0.8rem 0.5rem', fontSize: '0.85rem' }}>
@@ -235,7 +237,7 @@ export default function GestorLlaves() {
                   <thead>
                     <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
                       <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Código y Duración</th>
-                      <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Usuario (Contacto)</th>
+                      <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Usuario y Contacto</th>
                       <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Línea de Tiempo</th>
                     </tr>
                   </thead>
@@ -248,7 +250,8 @@ export default function GestorLlaves() {
                         </td>
                         <td style={{ padding: '0.8rem 0.5rem' }}>
                           <strong style={{ display: 'block' }}>{llave.usuario}</strong>
-                          {llave.correo && llave.correo !== '-' && <span style={{ fontSize: '0.8rem' }}>✉️ {llave.correo}</span>}
+                          {llave.correo && llave.correo !== '-' && <span style={{ fontSize: '0.85rem', color: 'var(--accent-blue)', display: 'block' }}>✉️ {llave.correo}</span>}
+                          {llave.telefono && llave.telefono !== '-' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>📱 {llave.telefono}</span>}
                         </td>
                         <td style={{ padding: '0.8rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-main)' }}>
                           <div>Activada: <b>{llave.fechaActivacion || '-'}</b></div>

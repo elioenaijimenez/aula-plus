@@ -9,7 +9,7 @@ import Utilidades from '../components/Utilidades';
 import ModuloIA from '../components/ModuloIA';
 import { useTutorial } from '../context/TutorialContext'; 
 import TutorialTooltip from '../components/TutorialTooltip';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 interface VarkInfo { visible: boolean; v: number; a: number; r: number; k: number; }
@@ -17,41 +17,56 @@ interface VarkInfo { visible: boolean; v: number; a: number; r: number; k: numbe
 export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: () => void, onSwitchToAdmin?: () => void }) {
   const [vistaActual, setVistaActual] = useState<'inicio' | 'crear-grupo' | 'mis-grupos' | 'vista-grupo' | 'reportes' | 'utilidades' | 'biblioteca' | 'modulo-ia'>('inicio');
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<{id: string, nombre: string, tab: 'alumnos' | 'asistencia' | 'evidencias'} | null>(null);
+  const [userEmail, setUserEmail] = useState('');
   
   const [varkInfo, setVarkInfo] = useState<VarkInfo>({ visible: false, v: 0, a: 0, r: 0, k: 0 });
-  
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
   const [perfilObligatorio, setPerfilObligatorio] = useState(false);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
-  
   const [guiaConductual, setGuiaConductual] = useState(false);
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
-  // Verificación Sincronizada con la Nube
+  // VIGILANTE ACTIVO: Comprueba si el admin revocó la llave mientras estabas dentro
+  const verificarVigenciaKeyPlus = async (emailToVerify: string) => {
+    if (!emailToVerify || emailToVerify === 'eliojimenezm@gmail.com' || emailToVerify === 'blaneguapo@gmail.com') return;
+    
+    try {
+      const q = query(collection(db, 'keys'), where('correo', '==', emailToVerify), where('estado', '==', 'en uso'));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        alert("🛑 Tu sesión fue revocada por el administrador o tu KeyPlus caducó.\nSerás redirigido al inicio.");
+        if (onLogout) onLogout();
+      }
+    } catch (error) {
+      console.error("Error al verificar vigencia silenciosa:", error);
+    }
+  };
+
   useEffect(() => {
-    const verificarPerfil = async () => {
+    const inicializarDashboard = async () => {
       const sessionLocal = localStorage.getItem('aulaPlusSession');
       if (sessionLocal) {
         const sessionData = JSON.parse(sessionLocal);
         const email = sessionData?.user?.email || sessionData?.email || 'default';
+        setUserEmail(email);
         
+        // Ejecutamos el vigilante al montar
+        await verificarVigenciaKeyPlus(email);
+
+        // Verificamos perfil
         try {
-          // Buscamos siempre en la nube (Fuente de la verdad)
           const docRef = doc(db, 'teacher_settings', email);
           const docSnap = await getDoc(docRef);
 
           if (docSnap.exists() && docSnap.data().memoriaEscolar?.escuela) {
-             // Obligamos a la tablet a sobreescribir sus datos locales con los de la nube
              localStorage.setItem(`aulaPlusPerfil_${email}`, JSON.stringify(docSnap.data().memoriaEscolar));
           } else {
-             // Si la nube está vacía, exigimos llenar el perfil
              setPerfilObligatorio(true);
              setMostrarPerfil(true);
           }
         } catch (error) {
-           console.error("Error verificando perfil en la nube:", error);
-           // Solo usamos la memoria local de la tablet si no hay internet
            const dataGuardadaLocal = localStorage.getItem(`aulaPlusPerfil_${email}`);
            if (!dataGuardadaLocal) {
              setPerfilObligatorio(true);
@@ -61,7 +76,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
       }
     };
     
-    verificarPerfil();
+    inicializarDashboard();
   }, []);
 
   const manejarCierrePerfil = () => {
@@ -70,11 +85,13 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   };
 
   const abrirGrupo = (id: string, nombre: string, tab: 'alumnos' | 'asistencia' | 'evidencias' = 'alumnos') => {
+    verificarVigenciaKeyPlus(userEmail); // Vigila al cambiar de vista
     setGrupoSeleccionado({ id, nombre, tab });
     setVistaActual('vista-grupo');
   };
 
   const navegarModulo = (modulo: any) => {
+    verificarVigenciaKeyPlus(userEmail); // Vigila al cambiar de módulo
     setVistaActual(modulo);
     limpiarPaneles();
     setMenuMovilAbierto(false); 
@@ -136,7 +153,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
             <button onClick={onLogout} className="pill-btn desktop-nav" style={{ background: 'transparent', border: '1px solid var(--accent-red)', color: 'var(--accent-red)' }}>Salir</button>
           )}
           <div onClick={() => { if(!perfilObligatorio) setMostrarPerfil(true); }} style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--bg-panel)', padding: '0.4rem 1rem', borderRadius: '50px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
-            <img src="https://ui-avatars.com/api/?name=Profe+Elio&background=1C51FF&color=fff" alt="Avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0 }} />
+            <img src={`https://ui-avatars.com/api/?name=${userEmail.charAt(0)}&background=1C51FF&color=fff`} alt="Avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0 }} />
             <span className="desktop-nav" style={{ fontSize: '0.9rem', fontWeight: 500 }}>Mi Perfil</span>
           </div>
         </div>
