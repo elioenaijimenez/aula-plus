@@ -14,6 +14,7 @@ interface Llave {
   telefono?: string;
   fechaActivacion?: string;
   fechaCaducidad?: string;
+  fechaRevocacion?: string; // Nuevo campo para el rastro de auditoría
   createdAt?: any; 
 }
 
@@ -66,8 +67,15 @@ export default function GestorLlaves() {
   const revocarLlave = async (id: string) => {
     if (window.confirm("¿Mandar esta llave a la Bóveda de Caducadas?")) {
       try {
-        await updateDoc(doc(db, 'keys', id), { estado: 'caducada' });
-        setLlaves(llaves.map(l => l.id === id ? { ...l, estado: 'caducada' } : l));
+        const hoy = new Date();
+        const fechaLocal = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        
+        await updateDoc(doc(db, 'keys', id), { 
+          estado: 'caducada', 
+          fechaRevocacion: fechaLocal // Estampamos la fecha de la revocación
+        });
+        
+        setLlaves(llaves.map(l => l.id === id ? { ...l, estado: 'caducada', fechaRevocacion: fechaLocal } : l));
       } catch (error) { alert("Error al revocar la llave."); }
     }
   };
@@ -98,7 +106,8 @@ export default function GestorLlaves() {
       Correo: l.correo || '-',
       Teléfono: l.telefono || '-',
       Activación: l.fechaActivacion || '-',
-      Caducidad: l.fechaCaducidad || '-'
+      Caducidad: l.fechaCaducidad || '-',
+      Revocación: l.fechaRevocacion || '-'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -225,22 +234,30 @@ export default function GestorLlaves() {
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', minWidth: '800px' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
-                      <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Código</th>
+                      <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Código y Duración</th>
                       <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Usuario (Contacto)</th>
-                      <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Fechas de Uso</th>
+                      <th style={{ padding: '0.8rem 0.5rem', color: 'var(--text-muted)' }}>Línea de Tiempo</th>
                     </tr>
                   </thead>
                   <tbody>
                     {caducadas.map(llave => (
-                      <tr key={llave.id} style={{ borderBottom: '1px solid var(--border-color)', opacity: 0.7 }}>
-                        <td style={{ padding: '0.8rem 0.5rem', fontFamily: 'monospace', fontWeight: 'bold' }}><del>{llave.codigo}</del></td>
+                      <tr key={llave.id} style={{ borderBottom: '1px solid var(--border-color)', opacity: 0.8 }}>
+                        <td style={{ padding: '0.8rem 0.5rem' }}>
+                          <del style={{ fontFamily: 'monospace', fontWeight: 'bold', fontSize: '1.1rem' }}>{llave.codigo}</del>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>{llave.duracion}</div>
+                        </td>
                         <td style={{ padding: '0.8rem 0.5rem' }}>
                           <strong style={{ display: 'block' }}>{llave.usuario}</strong>
                           {llave.correo && llave.correo !== '-' && <span style={{ fontSize: '0.8rem' }}>✉️ {llave.correo}</span>}
                         </td>
-                        <td style={{ padding: '0.8rem 0.5rem', fontSize: '0.85rem' }}>
-                          <div>Activada: {llave.fechaActivacion || '-'}</div>
-                          <div>Caducó: {llave.fechaCaducidad || '-'}</div>
+                        <td style={{ padding: '0.8rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                          <div>Activada: <b>{llave.fechaActivacion || '-'}</b></div>
+                          <div style={{ color: 'var(--text-muted)' }}>Fin original: {llave.fechaCaducidad || '-'}</div>
+                          {llave.fechaRevocacion && (
+                            <div style={{ color: 'var(--accent-red)', fontWeight: 'bold', marginTop: '0.2rem' }}>
+                              🛑 Revocada el: {llave.fechaRevocacion}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}

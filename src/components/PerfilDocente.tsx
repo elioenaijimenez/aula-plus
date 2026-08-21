@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import TutorialTooltip from './TutorialTooltip';
 
-export default function PerfilDocente({ onClose }: { onClose: () => void }) {
+export default function PerfilDocente({ onClose, obligarLlenado = false }: { onClose: () => void, obligarLlenado?: boolean }) {
   const [nombre, setNombre] = useState('');
   const [escuela, setEscuela] = useState('');
   const [ubicacion, setUbicacion] = useState('');
@@ -37,7 +37,16 @@ export default function PerfilDocente({ onClose }: { onClose: () => void }) {
     <div className="modal-overlay">
       <div className="modal-content" style={{ animation: 'fadeIn 0.2s' }}>
         <h3 style={{ marginTop: 0, fontSize: '1.4rem', color: 'var(--accent-blue)' }}>Perfil del Docente</h3>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Estos datos se usarán para generar los encabezados oficiales de tus reportes en Word y Excel.</p>
+        
+        {obligarLlenado ? (
+          <p style={{ color: 'var(--accent-red)', marginBottom: '1.5rem', fontSize: '0.9rem', fontWeight: 'bold' }}>
+            ⚠️ Configuración Inicial Obligatoria: Por favor, completa los datos de tu escuela para poder generar reportes oficiales y desbloquear el Dashboard.
+          </p>
+        ) : (
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+            Estos datos se usarán para generar los encabezados oficiales de tus reportes en Word y Excel.
+          </p>
+        )}
         
         <form onSubmit={guardarPerfil} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
@@ -57,8 +66,12 @@ export default function PerfilDocente({ onClose }: { onClose: () => void }) {
           </TutorialTooltip>
           
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-            <button type="submit" className="pill-btn" style={{ flex: 1, backgroundColor: 'var(--accent-blue)', color: 'white' }}>Guardar</button>
-            <button type="button" onClick={onClose} className="pill-btn" style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>Cerrar</button>
+            <button type="submit" className="pill-btn" style={{ flex: 1, backgroundColor: 'var(--accent-blue)', color: 'white' }}>
+              {obligarLlenado ? 'Guardar y Desbloquear' : 'Guardar'}
+            </button>
+            {!obligarLlenado && (
+              <button type="button" onClick={onClose} className="pill-btn" style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>Cerrar</button>
+            )}
           </div>
         </form>
       </div>
