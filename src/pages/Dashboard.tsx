@@ -28,6 +28,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
+  // Verificación Sincronizada con la Nube
   useEffect(() => {
     const verificarPerfil = async () => {
       const sessionLocal = localStorage.getItem('aulaPlusSession');
@@ -35,26 +36,27 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
         const sessionData = JSON.parse(sessionLocal);
         const email = sessionData?.user?.email || sessionData?.email || 'default';
         
-        const dataGuardadaLocal = localStorage.getItem(`aulaPlusPerfil_${email}`);
-        
-        if (dataGuardadaLocal) {
-           return;
-        }
-
         try {
+          // Buscamos siempre en la nube (Fuente de la verdad)
           const docRef = doc(db, 'teacher_settings', email);
           const docSnap = await getDoc(docRef);
 
           if (docSnap.exists() && docSnap.data().memoriaEscolar?.escuela) {
+             // Obligamos a la tablet a sobreescribir sus datos locales con los de la nube
              localStorage.setItem(`aulaPlusPerfil_${email}`, JSON.stringify(docSnap.data().memoriaEscolar));
           } else {
+             // Si la nube está vacía, exigimos llenar el perfil
              setPerfilObligatorio(true);
              setMostrarPerfil(true);
           }
         } catch (error) {
            console.error("Error verificando perfil en la nube:", error);
-           setPerfilObligatorio(true);
-           setMostrarPerfil(true);
+           // Solo usamos la memoria local de la tablet si no hay internet
+           const dataGuardadaLocal = localStorage.getItem(`aulaPlusPerfil_${email}`);
+           if (!dataGuardadaLocal) {
+             setPerfilObligatorio(true);
+             setMostrarPerfil(true);
+           }
         }
       }
     };

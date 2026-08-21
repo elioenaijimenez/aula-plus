@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 
@@ -11,21 +11,49 @@ export default function PerfilDocente({ onClose, obligarLlenado = false }: { onC
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    // 1. Saber quién está logueado
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    let email = 'default';
-    if (sessionLocal) {
-      const sessionData = JSON.parse(sessionLocal);
-      email = sessionData?.user?.email || sessionData?.email || 'default';
-      setUserEmail(email);
-    }
+    const cargarPerfil = async () => {
+      // 1. Saber quién está logueado
+      const sessionLocal = localStorage.getItem('aulaPlusSession');
+      let email = 'default';
+      if (sessionLocal) {
+        const sessionData = JSON.parse(sessionLocal);
+        email = sessionData?.user?.email || sessionData?.email || 'default';
+        setUserEmail(email);
+      }
 
-    // 2. Buscar si ESTE usuario en específico ya guardó datos en local
-    const dataGuardada = localStorage.getItem(`aulaPlusPerfil_${email}`);
-    if (dataGuardada) {
-      const p = JSON.parse(dataGuardada);
-      setNombre(p.nombre); setEscuela(p.escuela); setUbicacion(p.ubicacion);
-    }
+      // 2. Extraer SIEMPRE la versión más reciente de la nube (Firestore)
+      try {
+        const docRef = doc(db, 'teacher_settings', email);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists() && docSnap.data().memoriaEscolar) {
+          const p = docSnap.data().memoriaEscolar;
+          setNombre(p.nombre || '');
+          setEscuela(p.escuela || '');
+          setUbicacion(p.ubicacion || '');
+          
+          // Mantenemos sincronizada la memoria local para la generación de reportes
+          localStorage.setItem(`aulaPlusPerfil_${email}`, JSON.stringify(p));
+        } else {
+          // Si no hay nada en la nube (nuevo dispositivo), revisamos si por casualidad hay algo local
+          const dataGuardada = localStorage.getItem(`aulaPlusPerfil_${email}`);
+          if (dataGuardada) {
+            const p = JSON.parse(dataGuardada);
+            setNombre(p.nombre); setEscuela(p.escuela); setUbicacion(p.ubicacion);
+          }
+        }
+      } catch (error) {
+        console.error("Error conectando con la nube:", error);
+        // Respaldo en caso de mala conexión a internet
+        const dataGuardada = localStorage.getItem(`aulaPlusPerfil_${email}`);
+        if (dataGuardada) {
+          const p = JSON.parse(dataGuardada);
+          setNombre(p.nombre); setEscuela(p.escuela); setUbicacion(p.ubicacion);
+        }
+      }
+    };
+
+    cargarPerfil();
   }, []);
 
   const guardarPerfil = async (e: React.FormEvent) => {
@@ -39,7 +67,7 @@ export default function PerfilDocente({ onClose, obligarLlenado = false }: { onC
         memoriaEscolar: datosPerfil
       }, { merge: true });
 
-      // Guardar localmente para rapidez
+      // Guardar localmente para que los botones de PDF reaccionen al instante
       localStorage.setItem(`aulaPlusPerfil_${userEmail}`, JSON.stringify(datosPerfil));
       
       alert('¡Perfil actualizado con éxito!');
@@ -56,7 +84,6 @@ export default function PerfilDocente({ onClose, obligarLlenado = false }: { onC
       <div className="modal-content" style={{ animation: 'fadeIn 0.2s' }}>
         <h3 style={{ marginTop: 0, fontSize: '1.4rem', color: 'var(--accent-blue)' }}>Perfil del Docente</h3>
         
-        {/* Cajita visual que muestra el correo con el que ingresaron */}
         <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--bg-app)', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ backgroundColor: 'var(--accent-blue)', color: 'white', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem' }}>
             {userEmail.charAt(0).toUpperCase()}
