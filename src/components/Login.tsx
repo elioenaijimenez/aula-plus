@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { signInWithPopup } from 'firebase/auth'; 
+import { signInWithRedirect, getRedirectResult } from 'firebase/auth'; 
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
@@ -13,43 +13,67 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   const [keyPlus, setKeyPlus] = useState('');
   const [aceptoTerminos, setAceptoTerminos] = useState(false);
   const [cargando, setCargando] = useState(false);
+  const [verificandoRedireccion, setVerificandoRedireccion] = useState(true);
 
-  const iniciarSesionGoogle = async () => {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const userEmail = result.user.email || '';
-      setEmail(userEmail);
-      if (result.user.displayName) setNombre(result.user.displayName);
-
-      // VERIFICACIÓN INTELIGENTE: Buscar si el correo ya tiene licencia activa
-      const q = query(collection(db, 'keys'), where('correo', '==', userEmail), where('estado', '==', 'en uso'));
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        const docSnap = querySnapshot.docs[0];
-        const data = docSnap.data();
+  // EFECTO RESCATISTA: Este código corre automáticamente cuando la página recarga al volver de Google.
+  useEffect(() => {
+    const procesarRespuestaGoogle = async () => {
+      try {
+        const result = await getRedirectResult(auth);
         
-        // Verificar caducidad
-        const expira = new Date(data.fechaCaducidad);
-        expira.setMinutes(expira.getMinutes() + expira.getTimezoneOffset());
-        const hoy = new Date();
+        if (result && result.user) {
+          // ¡Atrapamos la llave con éxito tras la redirección!
+          const userEmail = result.user.email || '';
+          setEmail(userEmail);
+          if (result.user.displayName) setNombre(result.user.displayName);
 
-        if (hoy > expira) {
-          await updateDoc(doc(db, 'keys', docSnap.id), { estado: 'caducada' });
-          alert("Tu KeyPlus ha caducado. Ingresa una nueva licencia.");
-          setPaso(2); // Lo mandamos al formulario para que ponga nueva llave
-        } else {
-          // LLAVE VÁLIDA: Acceso directo, saltando el formulario
-          onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
-          return; 
+          // VERIFICACIÓN INTELIGENTE: Buscar si el correo ya tiene licencia activa
+          const q = query(collection(db, 'keys'), where('correo', '==', userEmail), where('estado', '==', 'en uso'));
+          const querySnapshot = await getDocs(q);
+
+          if (!querySnapshot.empty) {
+            const docSnap = querySnapshot.docs[0];
+            const data = docSnap.data();
+            
+            // Verificar caducidad
+            const expira = new Date(data.fechaCaducidad);
+            expira.setMinutes(expira.getMinutes() + expira.getTimezoneOffset());
+            const hoy = new Date();
+
+            if (hoy > expira) {
+              await updateDoc(doc(db, 'keys', docSnap.id), { estado: 'caducada' });
+              alert("Tu KeyPlus ha caducado. Ingresa una nueva licencia.");
+              setPaso(2);
+            } else {
+              // LLAVE VÁLIDA: Acceso directo, saltando el formulario
+              onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
+              setVerificandoRedireccion(false);
+              return; 
+            }
+          } else {
+            // Es un usuario nuevo o no tiene llave activa
+            setPaso(2);
+          }
         }
-      } else {
-        // Es un usuario nuevo o no tiene llave activa
-        setPaso(2);
+      } catch (error) {
+        console.error("Error al procesar la redirección:", error);
+        alert("Hubo un problema al validar tu cuenta de Google. Inténtalo de nuevo.");
       }
+      setVerificandoRedireccion(false);
+    };
+
+    procesarRespuestaGoogle();
+  }, [onLogin]);
+
+  // Nuevo método de inicio que usa redirección completa (Amigable con móviles y tablets)
+  const iniciarSesionGoogle = () => {
+    try {
+      setCargando(true);
+      signInWithRedirect(auth, googleProvider);
     } catch (error) {
-      console.error("Error en autenticación:", error);
-      alert("No se pudo iniciar sesión con Google. Revisa tu conexión.");
+      console.error("Error al iniciar redirección:", error);
+      setCargando(false);
+      alert("No se pudo conectar con Google. Revisa tu conexión.");
     }
   };
 
@@ -99,11 +123,20 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
     setCargando(false);
   };
 
+  // Si está regresando de Google, mostramos pantalla de carga para evitar el "parpadeo" del botón
+  if (verificandoRedireccion) {
+    return (
+      <div className="login-bg" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+         <div className="loader" style={{ borderTopColor: 'var(--accent-blue)', width: '50px', height: '50px' }}></div>
+         <p style={{ color: 'white', marginTop: '1rem', fontWeight: 'bold' }}>Validando credenciales...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="login-bg">
       <div className="login-card">
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          {/* ICONO AULA+ MEJORADO */}
           <div style={{ background: 'var(--accent-blue)', color: '#fff', width: '70px', height: '70px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '2rem', margin: '0 auto 1rem auto', boxShadow: '0 4px 15px rgba(28, 81, 255, 0.4)' }}>
             <span style={{ marginRight: '-4px' }}>A</span><span style={{ color: 'var(--accent-yellow)' }}>+</span>
           </div>
@@ -114,20 +147,19 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         {paso === 1 ? (
           <div>
             <TutorialTooltip mensaje="Inicia sesión usando tu cuenta de Google." esBloque={true} posicion="top">
-              <button onClick={iniciarSesionGoogle} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'white', color: '#333', display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center', border: '1px solid #ddd' }}>
-                {/* LOGO DE GOOGLE EN SVG PURO (No se romperá nunca) */}
+              <button onClick={iniciarSesionGoogle} disabled={cargando} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'white', color: '#333', display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center', border: '1px solid #ddd', opacity: cargando ? 0.7 : 1 }}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="22px" height="22px">
                   <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/>
                   <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/>
                   <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/>
                   <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/>
                 </svg>
-                Ingresar con Google
+                {cargando ? 'Conectando...' : 'Ingresar con Google'}
               </button>
             </TutorialTooltip>
           </div>
         ) : (
-          <form onSubmit={procesarIngreso} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <form onSubmit={procesarIngreso} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', animation: 'fadeIn 0.3s' }}>
             <p style={{ color: 'var(--accent-green)', textAlign: 'center', margin: 0 }}>Autenticado como: <b>{email}</b></p>
             <input type="text" required placeholder="Nombre Completo" className="search-input" value={nombre} onChange={e => setNombre(e.target.value)} disabled={cargando} />
             <input type="tel" required placeholder="Teléfono Celular" className="search-input" value={telefono} onChange={e => setTelefono(e.target.value)} disabled={cargando} />
@@ -136,7 +168,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
             <div className="legal-box" style={{ marginTop: '0.5rem' }}>
               <b>🛡️ Aviso de Privacidad y Uso de Datos:</b><br/>
               Aula+ recopila su nombre, correo y teléfono para la gestión de su licencia.<br/>
-              <b>📁 Drive:</b> Aula+ se vinculará con Google Drive para almacenar sus evidencias.
+              <b>📁 Drive:</b> Aula+ se vinculará con sus enlaces personales en la nube.
             </div>
 
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
