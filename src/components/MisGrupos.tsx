@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 export default function MisGrupos({ onCrearGrupo, onAbrirGrupo }: { onCrearGrupo: () => void, onAbrirGrupo: (id: string, nombre: string, tab: 'alumnos' | 'asistencia' | 'evidencias') => void }) {
@@ -7,9 +7,20 @@ export default function MisGrupos({ onCrearGrupo, onAbrirGrupo }: { onCrearGrupo
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'groups'), orderBy('createdAt', 'desc'));
+    // 1. Identificamos quién es el usuario conectado
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
+    const userEmail = sessionData?.user?.email || sessionData?.email || '';
+
+    // 2. Le pedimos a Firebase SOLO los grupos donde el docenteEmail sea igual al de este usuario
+    const q = query(collection(db, 'groups'), where('docenteEmail', '==', userEmail));
+    
     const desuscribir = onSnapshot(q, (snapshot) => {
       const lista = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // 3. Ordenamos en la memoria del navegador para evitar que Firebase pida índices extra
+      lista.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      
       setGrupos(lista);
       setCargando(false);
     });

@@ -48,21 +48,32 @@ export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) 
       setErrorMsg('El ciclo escolar debe tener el formato AAAA-AAAA (Ej. 2026-2027).');
       return;
     }
+    
+    // Obtener el correo del maestro desde la sesión guardada
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
+    const userEmail = sessionData?.user?.email || sessionData?.email || '';
+
     setGuardando(true);
     try {
+      // Evitar duplicados pero solo buscando entre los grupos de ESTE maestro
       const q = query(
         collection(db, 'groups'), 
+        where('docenteEmail', '==', userEmail),
         where('grade', '==', grado), 
         where('section', '==', grupo),
         where('subject', '==', disciplina),
         where('schoolYear', '==', ciclo)
       );
       const snapshot = await getDocs(q);
+      
       if (!snapshot.empty) {
         setErrorMsg(`El grupo ${grado}° ${grupo} de ${disciplina} ya está registrado en el ciclo ${ciclo}.`);
         setGuardando(false);
         return;
       }
+      
+      // Guardar el nuevo grupo inyectando el correo del maestro
       await addDoc(collection(db, 'groups'), {
         name: `${grado}° ${grupo}`,
         grade: grado,
@@ -70,6 +81,7 @@ export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) 
         subject: disciplina,
         emphasis: disciplina === 'Tecnología' ? enfasis : '',
         schoolYear: ciclo,
+        docenteEmail: userEmail,
         createdAt: serverTimestamp(),
         active: true,
       });
