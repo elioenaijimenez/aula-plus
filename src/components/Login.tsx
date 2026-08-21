@@ -16,21 +16,18 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   
   const [verificandoSesion, setVerificandoSesion] = useState(true);
   
-  // Nueva bandera para evitar el ciclo infinito de cierre de sesión
   const [forzarCierre, setForzarCierre] = useState(() => {
     return sessionStorage.getItem('forzarCierreAulaPlus') === 'true';
   });
 
   googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-  // Limpiamos la bandera de cierre forzado si el usuario interactúa
   const resetearForzarCierre = () => {
     setForzarCierre(false);
     sessionStorage.removeItem('forzarCierreAulaPlus');
   };
 
   useEffect(() => {
-    // Si forzamos el cierre, no corremos la validación automática
     if (forzarCierre) {
       setVerificandoSesion(false);
       return;
@@ -42,8 +39,8 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         setEmail(userEmail);
         if (user.displayName) setNombre(user.displayName);
 
-        // Permitimos el acceso directo si es Super Administrador
-        if (userEmail === 'elioenai.jimenez@gmail.com' || userEmail === 'blaneguapo@gmail.com') { 
+        // AQUÍ ESTABA EL ERROR: Ya corregí tu correo exacto
+        if (userEmail === 'eliojimenezm@gmail.com' || userEmail === 'blaneguapo@gmail.com') { 
            onLogin('admin', { nombre: user.displayName || 'Admin', email: userEmail, telefono: '', keyPlus: 'SUPER-ADMIN-MASTER' });
            return;
         }
@@ -66,7 +63,6 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
               setPaso(2);
               setVerificandoSesion(false);
             } else {
-              // LLAVE VÁLIDA: Acceso directo sin mostrar pantalla intermedia
               onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
             }
           } else {
@@ -86,7 +82,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   }, [onLogin, forzarCierre]);
 
   const iniciarSesionGoogle = async () => {
-    resetearForzarCierre(); // El usuario hizo clic, permitimos login
+    resetearForzarCierre(); 
     setCargando(true);
     try {
       await setPersistence(auth, browserLocalPersistence);

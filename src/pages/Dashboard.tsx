@@ -20,7 +20,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   
   const [varkInfo, setVarkInfo] = useState<VarkInfo>({ visible: false, v: 0, a: 0, r: 0, k: 0 });
   
-  // Estados para Perfil Obligatorio y Menú Móvil
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
   const [perfilObligatorio, setPerfilObligatorio] = useState(false);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
@@ -29,7 +28,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
-  // Verificación Inteligente de Perfil (Ligado al correo)
   useEffect(() => {
     const verificarPerfil = async () => {
       const sessionLocal = localStorage.getItem('aulaPlusSession');
@@ -37,30 +35,24 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
         const sessionData = JSON.parse(sessionLocal);
         const email = sessionData?.user?.email || sessionData?.email || 'default';
         
-        // 1. Revisar caché local primero por rapidez
         const dataGuardadaLocal = localStorage.getItem(`aulaPlusPerfil_${email}`);
         
         if (dataGuardadaLocal) {
-           // Ya está en memoria local, no pedirlo
            return;
         }
 
-        // 2. Si no está en local, revisar en Firebase (nube)
         try {
           const docRef = doc(db, 'teacher_settings', email);
           const docSnap = await getDoc(docRef);
 
           if (docSnap.exists() && docSnap.data().memoriaEscolar?.escuela) {
-             // Ya existe en la nube, guardarlo en local para futuras visitas y no molestar al usuario
              localStorage.setItem(`aulaPlusPerfil_${email}`, JSON.stringify(docSnap.data().memoriaEscolar));
           } else {
-             // No existe en ningún lado, obligar a llenarlo
              setPerfilObligatorio(true);
              setMostrarPerfil(true);
           }
         } catch (error) {
            console.error("Error verificando perfil en la nube:", error);
-           // Si falla la conexión, asumimos que debe llenarlo por precaución
            setPerfilObligatorio(true);
            setMostrarPerfil(true);
         }
@@ -83,7 +75,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const navegarModulo = (modulo: any) => {
     setVistaActual(modulo);
     limpiarPaneles();
-    setMenuMovilAbierto(false); // Cierra el menú móvil al hacer clic
+    setMenuMovilAbierto(false); 
   };
 
   const maxVark = Math.max(varkInfo.v, varkInfo.a, varkInfo.r, varkInfo.k, 1);
@@ -147,7 +139,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           </div>
         </div>
 
-        {/* Menú Desplegable Móvil (Condicional) */}
         {menuMovilAbierto && (
           <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', padding: '1.5rem', zIndex: 1000, gap: '1.2rem', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', animation: 'fadeIn 0.2s' }}>
             <span style={{ color: vistaActual === 'inicio' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('inicio')}>🏠 Inicio</span>
