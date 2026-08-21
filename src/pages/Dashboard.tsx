@@ -59,6 +59,9 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
             <span style={{ color: vistaActual === 'inicio' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => { setVistaActual('inicio'); limpiarPaneles(); }}>Inicio</span>
             <span style={{ color: vistaActual === 'mis-grupos' || vistaActual === 'vista-grupo' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => { setVistaActual('mis-grupos'); limpiarPaneles(); }}>Grupos</span>
             <span style={{ color: vistaActual === 'reportes' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => { setVistaActual('reportes'); limpiarPaneles(); }}>Reportes</span>
+            <span style={{ color: vistaActual === 'biblioteca' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => { setVistaActual('biblioteca'); limpiarPaneles(); }}>Biblioteca</span>
+            <span style={{ color: vistaActual === 'utilidades' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => { setVistaActual('utilidades'); limpiarPaneles(); }}>Utilidades</span>
+            <span style={{ color: vistaActual === 'modulo-ia' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => { setVistaActual('modulo-ia'); limpiarPaneles(); }}>IA</span>
           </nav>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>

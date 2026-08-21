@@ -1,62 +1,70 @@
 import { useState } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { signInWithPopup } from 'firebase/auth'; // <- Importamos la función de ventana emergente
-import { db, auth, googleProvider } from '../services/firebase'; // <- Importamos nuestras herramientas
+import { signInWithPopup } from 'firebase/auth'; 
+import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
 export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin', user: any) => void }) {
   const [paso, setPaso] = useState<1 | 2>(1);
   const [email, setEmail] = useState('');
   
-  // Datos de registro
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [keyPlus, setKeyPlus] = useState('');
   const [aceptoTerminos, setAceptoTerminos] = useState(false);
   const [cargando, setCargando] = useState(false);
 
-  // NUEVA FUNCIÓN: Inicio de sesión real con Google
   const iniciarSesionGoogle = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      
-      // Extraemos el correo real del usuario
-      setEmail(result.user.email || '');
-      
-      // Como un "bonus", autocompletamos el nombre si Google nos lo proporciona
-      if (result.user.displayName) {
-        setNombre(result.user.displayName);
+      const userEmail = result.user.email || '';
+      setEmail(userEmail);
+      if (result.user.displayName) setNombre(result.user.displayName);
+
+      // VERIFICACIÓN INTELIGENTE: Buscar si el correo ya tiene licencia activa
+      const q = query(collection(db, 'keys'), where('correo', '==', userEmail), where('estado', '==', 'en uso'));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const docSnap = querySnapshot.docs[0];
+        const data = docSnap.data();
+        
+        // Verificar caducidad
+        const expira = new Date(data.fechaCaducidad);
+        expira.setMinutes(expira.getMinutes() + expira.getTimezoneOffset());
+        const hoy = new Date();
+
+        if (hoy > expira) {
+          await updateDoc(doc(db, 'keys', docSnap.id), { estado: 'caducada' });
+          alert("Tu KeyPlus ha caducado. Ingresa una nueva licencia.");
+          setPaso(2); // Lo mandamos al formulario para que ponga nueva llave
+        } else {
+          // LLAVE VÁLIDA: Acceso directo, saltando el formulario
+          onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
+          return; 
+        }
+      } else {
+        // Es un usuario nuevo o no tiene llave activa
+        setPaso(2);
       }
-      
-      setPaso(2);
     } catch (error) {
       console.error("Error en autenticación:", error);
-      alert("No se pudo iniciar sesión con Google. Es posible que hayas cerrado la ventana emergente.");
+      alert("No se pudo iniciar sesión con Google. Revisa tu conexión.");
     }
   };
 
   const procesarIngreso = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!aceptoTerminos) {
-      alert("Debes aceptar los términos y condiciones de privacidad.");
-      return;
-    }
-    
-    // Bypass para el Administrador
-    if (keyPlus === 'SUPER-ADMIN-MASTER') {
-      onLogin('admin', { nombre, email, telefono, keyPlus });
-      return;
-    }
+    if (!aceptoTerminos) return alert("Debes aceptar los términos y condiciones de privacidad.");
+    if (keyPlus === 'SUPER-ADMIN-MASTER') return onLogin('admin', { nombre, email, telefono, keyPlus });
 
     setCargando(true);
-
     try {
-      // 1. Buscar la llave en Firebase
       const q = query(collection(db, 'keys'), where('codigo', '==', keyPlus));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
-        alert("La KeyPlus ingresada no existe. Verifica que esté escrita correctamente.");
+        alert("La KeyPlus ingresada no existe.");
         setCargando(false);
         return;
       }
@@ -64,11 +72,9 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
       const docSnap = querySnapshot.docs[0];
       const data = docSnap.data();
       const keyId = docSnap.id;
-
       const hoy = new Date();
       const fechaLocal = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 
-      // 2. Si la llave está nueva y disponible
       if (data.estado === 'disponible') {
         let dias = 7;
         if (data.duracion === '1 Mes') dias = 30;
@@ -78,45 +84,18 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         fechaExp.setDate(fechaExp.getDate() + dias);
         const caducidadLocal = new Date(fechaExp.getTime() - fechaExp.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 
-        // Se activa la llave y se vincula al docente
         await updateDoc(doc(db, 'keys', keyId), {
-          estado: 'en uso',
-          usuario: nombre,
-          correo: email,
-          telefono: telefono,
-          fechaActivacion: fechaLocal,
-          fechaCaducidad: caducidadLocal
+          estado: 'en uso', usuario: nombre, correo: email, telefono: telefono,
+          fechaActivacion: fechaLocal, fechaCaducidad: caducidadLocal
         });
-
         onLogin('docente', { nombre, email, telefono, keyPlus });
 
-      // 3. Si la llave ya está en uso
-      } else if (data.estado === 'en uso') {
-        if (data.correo === email) {
-          const expira = new Date(data.fechaCaducidad);
-          // Permite paso temporal ajustando la zona horaria a medianoche
-          expira.setMinutes(expira.getMinutes() + expira.getTimezoneOffset());
-          
-          if (hoy > expira) {
-            await updateDoc(doc(db, 'keys', keyId), { estado: 'caducada' });
-            alert("Tu KeyPlus ha caducado. Contacta al administrador de Aula+.");
-          } else {
-            onLogin('docente', { nombre, email, telefono, keyPlus });
-          }
-        } else {
-          alert("Esta KeyPlus ya se encuentra registrada y en uso por otro correo.");
-        }
-      
-      // 4. Si la llave está caducada o revocada
       } else {
-        alert("Esta KeyPlus ha caducado o fue revocada.");
+        alert("Esta KeyPlus ya está en uso, ha caducado o fue revocada.");
       }
-
     } catch (error) {
-      console.error("Error al validar la llave:", error);
-      alert("Hubo un problema al validar tu licencia. Revisa tu conexión a internet.");
+      alert("Hubo un problema al validar tu licencia.");
     }
-    
     setCargando(false);
   };
 
@@ -124,16 +103,25 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
     <div className="login-bg">
       <div className="login-card">
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ background: 'var(--accent-blue)', color: '#fff', width: '60px', height: '60px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.5rem', margin: '0 auto 1rem auto' }}>A+</div>
-          <h1 style={{ margin: 0, fontSize: '2rem' }}>Aula+</h1>
-          <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0 0' }}>Sistema de Gestión Escolar Avanzado</p>
+          {/* ICONO AULA+ MEJORADO */}
+          <div style={{ background: 'var(--accent-blue)', color: '#fff', width: '70px', height: '70px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '2rem', margin: '0 auto 1rem auto', boxShadow: '0 4px 15px rgba(28, 81, 255, 0.4)' }}>
+            <span style={{ marginRight: '-4px' }}>A</span><span style={{ color: 'var(--accent-yellow)' }}>+</span>
+          </div>
+          <h1 style={{ margin: 0, fontSize: '2.2rem', letterSpacing: '-1px' }}>Aula+</h1>
+          <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0 0', fontSize: '0.95rem' }}>Sistema de Gestión Escolar Avanzado</p>
         </div>
 
         {paso === 1 ? (
           <div>
-            <TutorialTooltip mensaje="Inicia sesión usando tu cuenta de Google para garantizar la seguridad de tu información." esBloque={true} posicion="top">
-              <button onClick={iniciarSesionGoogle} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'white', color: '#333', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google" width="20" />
+            <TutorialTooltip mensaje="Inicia sesión usando tu cuenta de Google." esBloque={true} posicion="top">
+              <button onClick={iniciarSesionGoogle} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'white', color: '#333', display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center', border: '1px solid #ddd' }}>
+                {/* LOGO DE GOOGLE EN SVG PURO (No se romperá nunca) */}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="22px" height="22px">
+                  <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/>
+                  <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/>
+                  <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/>
+                  <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/>
+                </svg>
                 Ingresar con Google
               </button>
             </TutorialTooltip>
@@ -141,27 +129,23 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         ) : (
           <form onSubmit={procesarIngreso} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <p style={{ color: 'var(--accent-green)', textAlign: 'center', margin: 0 }}>Autenticado como: <b>{email}</b></p>
-            
             <input type="text" required placeholder="Nombre Completo" className="search-input" value={nombre} onChange={e => setNombre(e.target.value)} disabled={cargando} />
             <input type="tel" required placeholder="Teléfono Celular" className="search-input" value={telefono} onChange={e => setTelefono(e.target.value)} disabled={cargando} />
-            
-            <TutorialTooltip mensaje="Ingresa la licencia KeyPlus proporcionada por el administrador." esBloque={true} posicion="top">
-              <input type="text" required placeholder="Introduce tu KeyPlus" className="search-input" style={{ borderLeft: '4px solid var(--accent-yellow)', margin: 0, width: '100%' }} value={keyPlus} onChange={e => setKeyPlus(e.target.value)} disabled={cargando} />
-            </TutorialTooltip>
+            <input type="text" required placeholder="Introduce tu KeyPlus" className="search-input" style={{ borderLeft: '4px solid var(--accent-yellow)' }} value={keyPlus} onChange={e => setKeyPlus(e.target.value)} disabled={cargando} />
             
             <div className="legal-box" style={{ marginTop: '0.5rem' }}>
               <b>🛡️ Aviso de Privacidad y Uso de Datos:</b><br/>
-              Aula+ recopila su nombre, correo y número telefónico exclusivamente para la gestión de su licencia y soporte técnico. <br/><br/>
-              <b>📁 Almacenamiento en la Nube:</b> Al utilizar los módulos de "Biblioteca" o generar "Reportes", el sistema se vinculará con su espacio personal de Google Drive para almacenar sus evidencias e infografías sin consumir almacenamiento local. Aula+ no leerá ni alterará archivos ajenos a la plataforma.
+              Aula+ recopila su nombre, correo y teléfono para la gestión de su licencia.<br/>
+              <b>📁 Drive:</b> Aula+ se vinculará con Google Drive para almacenar sus evidencias.
             </div>
 
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
               <input type="checkbox" checked={aceptoTerminos} onChange={e => setAceptoTerminos(e.target.checked)} disabled={cargando} />
-              He leído y acepto el aviso de privacidad y uso de Drive.
+              Acepto el aviso de privacidad.
             </label>
 
             <button type="submit" disabled={cargando} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'var(--accent-blue)', color: 'white', marginTop: '1rem' }}>
-              {cargando ? 'Validando Licencia...' : 'Activar Licencia e Ingresar'}
+              {cargando ? 'Validando Licencia...' : 'Activar e Ingresar'}
             </button>
           </form>
         )}

@@ -2,12 +2,23 @@ import { useState, useEffect } from 'react';
 import TutorialTooltip from './TutorialTooltip';
 
 export default function PerfilDocente({ onClose }: { onClose: () => void }) {
-  const [nombre, setNombre] = useState('Elioenai Jimenez Martinez');
-  const [escuela, setEscuela] = useState('Escuela Secundaria Técnica No. 5');
-  const [ubicacion, setUbicacion] = useState('Yecapixtla, Morelos');
+  const [nombre, setNombre] = useState('');
+  const [escuela, setEscuela] = useState('');
+  const [ubicacion, setUbicacion] = useState('');
+  const [userEmail, setUserEmail] = useState('default');
 
   useEffect(() => {
-    const dataGuardada = localStorage.getItem('aulaPlusPerfil');
+    // 1. Saber quién está logueado
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    let email = 'default';
+    if (sessionLocal) {
+      const sessionData = JSON.parse(sessionLocal);
+      email = sessionData?.user?.email || 'default';
+      setUserEmail(email);
+    }
+
+    // 2. Buscar si ESTE usuario en específico ya guardó datos
+    const dataGuardada = localStorage.getItem(`aulaPlusPerfil_${email}`);
     if (dataGuardada) {
       const p = JSON.parse(dataGuardada);
       setNombre(p.nombre); setEscuela(p.escuela); setUbicacion(p.ubicacion);
@@ -16,7 +27,8 @@ export default function PerfilDocente({ onClose }: { onClose: () => void }) {
 
   const guardarPerfil = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('aulaPlusPerfil', JSON.stringify({ nombre, escuela, ubicacion }));
+    // Guardar específicamente para el correo del maestro activo
+    localStorage.setItem(`aulaPlusPerfil_${userEmail}`, JSON.stringify({ nombre, escuela, ubicacion }));
     alert('¡Perfil actualizado con éxito!');
     onClose();
   };
