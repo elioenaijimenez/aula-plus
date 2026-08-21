@@ -74,7 +74,8 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
       if (error.code === 'auth/popup-blocked') {
         alert("⚠️ Tu navegador bloqueó la ventana de inicio de sesión. Por favor, permite las ventanas emergentes (pop-ups) o usa la opción 'Añadir a la pantalla de inicio'.");
       } else if (error.code !== 'auth/popup-closed-by-user') {
-        alert("Error al conectar con Google. Revisa tu conexión de red.");
+        // AQUÍ REVELAMOS EL VERDADERO ERROR DE FIREBASE
+        alert(`Error técnico de Firebase:\nCódigo: ${error.code}\nMensaje: ${error.message}`);
       }
     }
   };
