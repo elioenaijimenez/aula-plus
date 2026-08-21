@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { signInWithPopup, onAuthStateChanged } from 'firebase/auth'; 
+import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth'; 
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
@@ -16,10 +16,9 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   
   const [verificandoSesion, setVerificandoSesion] = useState(true);
 
-  // Obligamos a Google a siempre mostrar la ventana de selección para evitar que se quede pegado
   googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-  // OBSERVADOR GLOBAL: Revisa si ya entraste
+  // OBSERVADOR GLOBAL
   useEffect(() => {
     const desuscribir = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -66,15 +65,17 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   const iniciarSesionGoogle = async () => {
     setCargando(true);
     try {
-      // Usamos Popup con manejo de errores estricto
+      // 1. OBLIGAMOS A FIREBASE A USAR ALMACENAMIENTO LOCAL ANTISUSPENSIONES
+      await setPersistence(auth, browserLocalPersistence);
+      
+      // 2. ABRIMOS EL POPUP
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error("Error Popup:", error);
       setCargando(false);
       if (error.code === 'auth/popup-blocked') {
-        alert("⚠️ Tu navegador bloqueó la ventana de inicio de sesión. Por favor, permite las ventanas emergentes (pop-ups) o usa la opción 'Añadir a la pantalla de inicio'.");
+        alert("⚠️ Tu navegador bloqueó la ventana. Por favor, permite las ventanas emergentes o usa 'Añadir a la pantalla de inicio'.");
       } else if (error.code !== 'auth/popup-closed-by-user') {
-        // AQUÍ REVELAMOS EL VERDADERO ERROR DE FIREBASE
         alert(`Error técnico de Firebase:\nCódigo: ${error.code}\nMensaje: ${error.message}`);
       }
     }
