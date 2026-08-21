@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db } from '../services/firebase';
-import VisorPDFModal from './VisorPDFModal';
 
 interface Libro { id: string; titulo: string; descripcion: string; categoria: string; cover: string; url: string; fecha?: string; }
 
@@ -10,13 +8,13 @@ export default function GestorBibliotecaGlobal() {
   const [libros, setLibros] = useState<Libro[]>([]);
   const [cargandoLibros, setCargandoLibros] = useState(true);
   const [libroEditando, setLibroEditando] = useState<Libro | null>(null);
-  const [recursoViendo, setRecursoViendo] = useState<Libro | null>(null);
 
   const [nuevoTitulo, setNuevoTitulo] = useState('');
   const [nuevaCategoria, setNuevaCategoria] = useState('Normativo');
   const [nuevaDesc, setNuevaDesc] = useState('');
   const [nuevoCover, setNuevoCover] = useState('');
-  const [archivoPendiente, setArchivoPendiente] = useState<File | null>(null);
+  const [nuevaUrl, setNuevaUrl] = useState('');
+  const [creandoNuevo, setCreandoNuevo] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -32,44 +30,30 @@ export default function GestorBibliotecaGlobal() {
     fetchLibros();
   }, []);
 
-  const manejarSubidaArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.type !== 'application/pdf') {
-      alert('Formato no válido. Solo se permiten archivos PDF.');
-      return;
-    }
-    setArchivoPendiente(file);
-    setNuevoTitulo(file.name.replace('.pdf', ''));
+  const abrirFormularioNuevo = () => {
+    setNuevoTitulo(''); setNuevaDesc(''); setNuevaUrl(''); setNuevoCover(''); setNuevaCategoria('Normativo');
+    setCreandoNuevo(true);
   };
 
   const subirNuevoRecurso = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!nuevaUrl) { alert('El enlace del documento es obligatorio.'); return; }
+    
     setGuardando(true);
     try {
-      let urlPermanente = '';
-      
-      // Subir archivo real a Firebase Storage
-      if (archivoPendiente) {
-        const storage = getStorage();
-        const fileRef = storageRef(storage, `global_library/${Date.now()}_${archivoPendiente.name}`);
-        await uploadBytes(fileRef, archivoPendiente);
-        urlPermanente = await getDownloadURL(fileRef);
-      }
-
       const coverFinal = nuevoCover || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400';
 
       const docRef = await addDoc(collection(db, 'global_library'), {
         titulo: nuevoTitulo, descripcion: nuevaDesc, categoria: nuevaCategoria,
-        cover: coverFinal, url: urlPermanente, createdAt: serverTimestamp()
+        cover: coverFinal, url: nuevaUrl, createdAt: serverTimestamp()
       });
       
-      const nuevo = { id: docRef.id, titulo: nuevoTitulo, descripcion: nuevaDesc, categoria: nuevaCategoria, cover: coverFinal, url: urlPermanente };
+      const nuevo = { id: docRef.id, titulo: nuevoTitulo, descripcion: nuevaDesc, categoria: nuevaCategoria, cover: coverFinal, url: nuevaUrl };
       setLibros([nuevo, ...libros]);
-      setNuevoTitulo(''); setNuevaDesc(''); setNuevoCover(''); setNuevaCategoria('Normativo'); setArchivoPendiente(null);
+      setCreandoNuevo(false);
     } catch (error) { 
       console.error(error);
-      alert("Error al guardar el recurso. Verifica tu conexión y configuración de Storage."); 
+      alert("Error al guardar el recurso. Verifica tu conexión."); 
     }
     setGuardando(false);
   };
@@ -80,7 +64,7 @@ export default function GestorBibliotecaGlobal() {
     setGuardando(true);
     try {
       const ref = doc(db, 'global_library', libroEditando.id);
-      await updateDoc(ref, { titulo: libroEditando.titulo, descripcion: libroEditando.descripcion, categoria: libroEditando.categoria, cover: libroEditando.cover });
+      await updateDoc(ref, { titulo: libroEditando.titulo, descripcion: libroEditando.descripcion, categoria: libroEditando.categoria, cover: libroEditando.cover, url: libroEditando.url });
       setLibros(libros.map(l => l.id === libroEditando.id ? libroEditando : l));
       setLibroEditando(null);
     } catch (error) { alert("Error al actualizar."); }
@@ -96,10 +80,9 @@ export default function GestorBibliotecaGlobal() {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
-      {recursoViendo && <VisorPDFModal url={recursoViendo.url} titulo={recursoViendo.titulo} onClose={() => setRecursoViendo(null)} />}
       
       <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', height: 'fit-content' }}>
-        <h3 style={{ margin: '0 0 1.5rem 0' }}>{libroEditando ? 'Editar Recurso' : 'Subir Nuevo Recurso PDF'}</h3>
+        <h3 style={{ margin: '0 0 1.5rem 0' }}>{libroEditando ? 'Editar Recurso' : 'Vincular Nuevo Recurso'}</h3>
         
         {libroEditando ? (
            <form onSubmit={guardarEdicionLibro} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -108,6 +91,7 @@ export default function GestorBibliotecaGlobal() {
               <option value="Normativo">Normativo Oficial</option>
               <option value="Rincon">Rincón de Lectura</option>
             </select>
+            <input type="url" required placeholder="Enlace del documento (Drive, OneDrive...)" className="search-input" style={{ borderLeft: '4px solid var(--accent-blue)' }} value={libroEditando.url} onChange={e => setLibroEditando({...libroEditando, url: e.target.value})} />
             <textarea placeholder="Descripción..." className="search-input" style={{ resize: 'vertical' }} value={libroEditando.descripcion} onChange={e => setLibroEditando({...libroEditando, descripcion: e.target.value})}></textarea>
             <input type="url" placeholder="Carátula (URL opcional)" className="search-input" value={libroEditando.cover} onChange={e => setLibroEditando({...libroEditando, cover: e.target.value})} />
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
@@ -115,32 +99,27 @@ export default function GestorBibliotecaGlobal() {
               <button type="button" onClick={() => setLibroEditando(null)} className="pill-btn" style={{ flex: 1, background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>Cancelar</button>
             </div>
           </form>
-        ) : archivoPendiente ? (
+        ) : creandoNuevo ? (
           <form onSubmit={subirNuevoRecurso} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ padding: '1rem', backgroundColor: 'rgba(28, 81, 255, 0.1)', borderRadius: '12px', border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)', fontWeight: 'bold' }}>
-              📄 {archivoPendiente.name}
-            </div>
             <input type="text" required placeholder="Título público del documento" className="search-input" value={nuevoTitulo} onChange={e => setNuevoTitulo(e.target.value)} />
             <select className="search-input" value={nuevaCategoria} onChange={e => setNuevaCategoria(e.target.value)}>
               <option value="Normativo">Normativo Oficial</option>
               <option value="Rincon">Rincón de Lectura</option>
             </select>
+            <input type="url" required placeholder="Enlace público del archivo (Google Drive, etc.)" className="search-input" style={{ borderLeft: '4px solid var(--accent-blue)' }} value={nuevaUrl} onChange={e => setNuevaUrl(e.target.value)} />
             <textarea placeholder="Breve descripción..." className="search-input" style={{ resize: 'vertical' }} value={nuevaDesc} onChange={e => setNuevaDesc(e.target.value)}></textarea>
-            <input type="url" placeholder="Carátula (URL opcional)" className="search-input" value={nuevoCover} onChange={e => setNuevoCover(e.target.value)} />
+            <input type="url" placeholder="URL de imagen para portada (Opcional)" className="search-input" value={nuevoCover} onChange={e => setNuevoCover(e.target.value)} />
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
               <button type="submit" disabled={guardando} className="pill-btn" style={{ flex: 1, background: 'var(--accent-purple)', color: 'white' }}>
-                {guardando ? 'Subiendo archivo...' : 'Subir a la Nube'}
+                {guardando ? 'Guardando...' : 'Publicar Recurso'}
               </button>
-              <button type="button" onClick={() => setArchivoPendiente(null)} className="pill-btn" style={{ flex: 1, background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>Cancelar</button>
+              <button type="button" onClick={() => setCreandoNuevo(false)} className="pill-btn" style={{ flex: 1, background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>Cancelar</button>
             </div>
           </form>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', padding: '2rem 1rem', border: '2px dashed var(--border-color)', borderRadius: '12px' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', margin: 0 }}>Sube un documento PDF para compartirlo con todos los docentes.</p>
-            <div className="file-upload-wrapper">
-              <button className="pill-btn" style={{ backgroundColor: 'var(--accent-blue)', color: 'white' }}>➕ Seleccionar PDF</button>
-              <input type="file" accept="application/pdf" onChange={manejarSubidaArchivo} />
-            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', margin: 0 }}>Vincula un documento desde la nube para compartirlo con los docentes.</p>
+            <button onClick={abrirFormularioNuevo} className="pill-btn" style={{ backgroundColor: 'var(--accent-blue)', color: 'white' }}>➕ Vincular Nuevo Enlace</button>
           </div>
         )}
       </div>
@@ -151,7 +130,7 @@ export default function GestorBibliotecaGlobal() {
           <div className="book-grid">
             {libros.map(b => (
               <div key={b.id} style={{ position: 'relative', display: 'flex', flexDirection: 'column', marginBottom: '1rem' }}>
-                <div className="book-card" onClick={() => setRecursoViendo(b)} style={{ flex: 1 }}>
+                <div className="book-card" onClick={() => window.open(b.url, '_blank')} style={{ flex: 1 }}>
                   <img src={b.cover} alt="Cover" className="book-cover" />
                   <h4 className="book-title" style={{ marginTop: '0.5rem' }}>{b.titulo}</h4>
                   <p className="book-author" style={{ fontSize: '0.75rem' }}>{b.categoria}</p>
