@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db } from '../services/firebase';
 import VisorPDFModal from './VisorPDFModal';
 
@@ -34,23 +35,42 @@ export default function GestorBibliotecaGlobal() {
   const manejarSubidaArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.type !== 'application/pdf') {
+      alert('Formato no válido. Solo se permiten archivos PDF.');
+      return;
+    }
     setArchivoPendiente(file);
-    setNuevoTitulo(file.name);
+    setNuevoTitulo(file.name.replace('.pdf', ''));
   };
 
   const subirNuevoRecurso = async (e: React.FormEvent) => {
     e.preventDefault();
     setGuardando(true);
     try {
+      let urlPermanente = '';
+      
+      // Subir archivo real a Firebase Storage
+      if (archivoPendiente) {
+        const storage = getStorage();
+        const fileRef = storageRef(storage, `global_library/${Date.now()}_${archivoPendiente.name}`);
+        await uploadBytes(fileRef, archivoPendiente);
+        urlPermanente = await getDownloadURL(fileRef);
+      }
+
+      const coverFinal = nuevoCover || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400';
+
       const docRef = await addDoc(collection(db, 'global_library'), {
         titulo: nuevoTitulo, descripcion: nuevaDesc, categoria: nuevaCategoria,
-        cover: nuevoCover || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400',
-        url: archivoPendiente ? URL.createObjectURL(archivoPendiente) : '', createdAt: serverTimestamp()
+        cover: coverFinal, url: urlPermanente, createdAt: serverTimestamp()
       });
-      const nuevo = { id: docRef.id, titulo: nuevoTitulo, descripcion: nuevaDesc, categoria: nuevaCategoria, cover: nuevoCover || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400', url: archivoPendiente ? URL.createObjectURL(archivoPendiente) : '' };
+      
+      const nuevo = { id: docRef.id, titulo: nuevoTitulo, descripcion: nuevaDesc, categoria: nuevaCategoria, cover: coverFinal, url: urlPermanente };
       setLibros([nuevo, ...libros]);
       setNuevoTitulo(''); setNuevaDesc(''); setNuevoCover(''); setNuevaCategoria('Normativo'); setArchivoPendiente(null);
-    } catch (error) { alert("Error al guardar el recurso."); }
+    } catch (error) { 
+      console.error(error);
+      alert("Error al guardar el recurso. Verifica tu conexión y configuración de Storage."); 
+    }
     setGuardando(false);
   };
 
@@ -79,7 +99,8 @@ export default function GestorBibliotecaGlobal() {
       {recursoViendo && <VisorPDFModal url={recursoViendo.url} titulo={recursoViendo.titulo} onClose={() => setRecursoViendo(null)} />}
       
       <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', height: 'fit-content' }}>
-        <h3 style={{ margin: '0 0 1.5rem 0' }}>{libroEditando ? 'Editar Recurso' : 'Subir Nuevo Recurso'}</h3>
+        <h3 style={{ margin: '0 0 1.5rem 0' }}>{libroEditando ? 'Editar Recurso' : 'Subir Nuevo Recurso PDF'}</h3>
+        
         {libroEditando ? (
            <form onSubmit={guardarEdicionLibro} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <input type="text" required placeholder="Título" className="search-input" value={libroEditando.titulo} onChange={e => setLibroEditando({...libroEditando, titulo: e.target.value})} />
@@ -88,7 +109,7 @@ export default function GestorBibliotecaGlobal() {
               <option value="Rincon">Rincón de Lectura</option>
             </select>
             <textarea placeholder="Descripción..." className="search-input" style={{ resize: 'vertical' }} value={libroEditando.descripcion} onChange={e => setLibroEditando({...libroEditando, descripcion: e.target.value})}></textarea>
-            <input type="url" placeholder="Carátula (URL)" className="search-input" value={libroEditando.cover} onChange={e => setLibroEditando({...libroEditando, cover: e.target.value})} />
+            <input type="url" placeholder="Carátula (URL opcional)" className="search-input" value={libroEditando.cover} onChange={e => setLibroEditando({...libroEditando, cover: e.target.value})} />
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
               <button type="submit" disabled={guardando} className="pill-btn" style={{ flex: 1, background: 'var(--accent-purple)', color: 'white' }}>Guardar</button>
               <button type="button" onClick={() => setLibroEditando(null)} className="pill-btn" style={{ flex: 1, background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>Cancelar</button>
@@ -96,22 +117,28 @@ export default function GestorBibliotecaGlobal() {
           </form>
         ) : archivoPendiente ? (
           <form onSubmit={subirNuevoRecurso} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <input type="text" required placeholder="Título" className="search-input" value={nuevoTitulo} onChange={e => setNuevoTitulo(e.target.value)} />
+            <div style={{ padding: '1rem', backgroundColor: 'rgba(28, 81, 255, 0.1)', borderRadius: '12px', border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)', fontWeight: 'bold' }}>
+              📄 {archivoPendiente.name}
+            </div>
+            <input type="text" required placeholder="Título público del documento" className="search-input" value={nuevoTitulo} onChange={e => setNuevoTitulo(e.target.value)} />
             <select className="search-input" value={nuevaCategoria} onChange={e => setNuevaCategoria(e.target.value)}>
               <option value="Normativo">Normativo Oficial</option>
               <option value="Rincon">Rincón de Lectura</option>
             </select>
-            <textarea placeholder="Descripción..." className="search-input" style={{ resize: 'vertical' }} value={nuevaDesc} onChange={e => setNuevaDesc(e.target.value)}></textarea>
-            <input type="url" placeholder="Carátula (URL)" className="search-input" value={nuevoCover} onChange={e => setNuevoCover(e.target.value)} />
+            <textarea placeholder="Breve descripción..." className="search-input" style={{ resize: 'vertical' }} value={nuevaDesc} onChange={e => setNuevaDesc(e.target.value)}></textarea>
+            <input type="url" placeholder="Carátula (URL opcional)" className="search-input" value={nuevoCover} onChange={e => setNuevoCover(e.target.value)} />
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-              <button type="submit" disabled={guardando} className="pill-btn" style={{ flex: 1, background: 'var(--accent-purple)', color: 'white' }}>Subir</button>
+              <button type="submit" disabled={guardando} className="pill-btn" style={{ flex: 1, background: 'var(--accent-purple)', color: 'white' }}>
+                {guardando ? 'Subiendo archivo...' : 'Subir a la Nube'}
+              </button>
               <button type="button" onClick={() => setArchivoPendiente(null)} className="pill-btn" style={{ flex: 1, background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>Cancelar</button>
             </div>
           </form>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', padding: '2rem 1rem', border: '2px dashed var(--border-color)', borderRadius: '12px' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', margin: 0 }}>Sube un documento PDF para compartirlo con todos los docentes.</p>
             <div className="file-upload-wrapper">
-              <button className="pill-btn" style={{ backgroundColor: 'var(--accent-blue)', color: 'white' }}>➕ Seleccionar Archivo PDF</button>
+              <button className="pill-btn" style={{ backgroundColor: 'var(--accent-blue)', color: 'white' }}>➕ Seleccionar PDF</button>
               <input type="file" accept="application/pdf" onChange={manejarSubidaArchivo} />
             </div>
           </div>

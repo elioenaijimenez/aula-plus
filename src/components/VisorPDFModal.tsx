@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import { Document, Page } from 'react-pdf';
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+
+// Configuración del motor PDF inyectada a nivel global para que funcione en cualquier módulo
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export default function VisorPDFModal({ url, titulo, onClose }: { url: string, titulo: string, onClose: () => void }) {
   const [numPages, setNumPages] = useState<number>();
@@ -26,9 +31,13 @@ export default function VisorPDFModal({ url, titulo, onClose }: { url: string, t
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', backgroundColor: 'var(--bg-panel)', borderRadius: '12px', padding: '1rem', border: '1px solid var(--border-color)' }}>
-          <Document file={url} onLoadSuccess={onDocumentLoadSuccess} loading={<div className="loader"></div>} error={<div style={{color: 'var(--accent-red)'}}>Error al cargar el PDF. Verifica que el archivo exista.</div>}>
-            <Page pageNumber={pageNumber} renderTextLayer={false} renderAnnotationLayer={false} width={Math.min(window.innerWidth * 0.85, 600)} />
-          </Document>
+          {url ? (
+            <Document file={url} onLoadSuccess={onDocumentLoadSuccess} loading={<div className="loader"></div>} error={<div style={{color: 'var(--accent-red)', textAlign: 'center', padding: '2rem'}}>Error al cargar el PDF.<br/>Es posible que el archivo haya sido eliminado o el enlace no sea válido.</div>}>
+              <Page pageNumber={pageNumber} renderTextLayer={false} renderAnnotationLayer={false} width={Math.min(window.innerWidth * 0.85, 600)} />
+            </Document>
+          ) : (
+            <div style={{color: 'var(--text-muted)', padding: '2rem'}}>No hay un documento adjunto a este registro.</div>
+          )}
         </div>
 
       </div>
