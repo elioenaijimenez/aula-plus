@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth'; 
+import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth'; 
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
@@ -15,16 +15,38 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   const [cargando, setCargando] = useState(false);
   
   const [verificandoSesion, setVerificandoSesion] = useState(true);
+  
+  // Nueva bandera para evitar el ciclo infinito de cierre de sesión
+  const [forzarCierre, setForzarCierre] = useState(() => {
+    return sessionStorage.getItem('forzarCierreAulaPlus') === 'true';
+  });
 
   googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-  // OBSERVADOR GLOBAL
+  // Limpiamos la bandera de cierre forzado si el usuario interactúa
+  const resetearForzarCierre = () => {
+    setForzarCierre(false);
+    sessionStorage.removeItem('forzarCierreAulaPlus');
+  };
+
   useEffect(() => {
+    // Si forzamos el cierre, no corremos la validación automática
+    if (forzarCierre) {
+      setVerificandoSesion(false);
+      return;
+    }
+
     const desuscribir = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userEmail = user.email || '';
         setEmail(userEmail);
         if (user.displayName) setNombre(user.displayName);
+
+        // Permitimos el acceso directo si es Super Administrador
+        if (userEmail === 'elioenai.jimenez@gmail.com' || userEmail === 'blaneguapo@gmail.com') { // CAMBIA ESTO POR TUS CORREOS REALES
+           onLogin('admin', { nombre: user.displayName || 'Admin', email: userEmail, telefono: '', keyPlus: 'SUPER-ADMIN-MASTER' });
+           return;
+        }
 
         try {
           const q = query(collection(db, 'keys'), where('correo', '==', userEmail), where('estado', '==', 'en uso'));
@@ -44,6 +66,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
               setPaso(2);
               setVerificandoSesion(false);
             } else {
+              // LLAVE VÁLIDA: Acceso directo sin mostrar pantalla intermedia
               onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
             }
           } else {
@@ -60,15 +83,13 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
     });
 
     return () => desuscribir();
-  }, [onLogin]);
+  }, [onLogin, forzarCierre]);
 
   const iniciarSesionGoogle = async () => {
+    resetearForzarCierre(); // El usuario hizo clic, permitimos login
     setCargando(true);
     try {
-      // 1. OBLIGAMOS A FIREBASE A USAR ALMACENAMIENTO LOCAL ANTISUSPENSIONES
       await setPersistence(auth, browserLocalPersistence);
-      
-      // 2. ABRIMOS EL POPUP
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error("Error Popup:", error);

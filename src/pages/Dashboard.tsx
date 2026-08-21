@@ -8,7 +8,9 @@ import Biblioteca from '../components/Biblioteca';
 import Utilidades from '../components/Utilidades';
 import ModuloIA from '../components/ModuloIA';
 import { useTutorial } from '../context/TutorialContext'; 
-import TutorialTooltip from '../components/TutorialTooltip'; 
+import TutorialTooltip from '../components/TutorialTooltip';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 interface VarkInfo { visible: boolean; v: number; a: number; r: number; k: number; }
 
@@ -27,20 +29,45 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
-  // Verificación de Perfil al montar el Dashboard
+  // Verificación Inteligente de Perfil (Ligado al correo)
   useEffect(() => {
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    if (sessionLocal) {
-      const sessionData = JSON.parse(sessionLocal);
-      const email = sessionData?.user?.email || sessionData?.email || 'default';
-      const dataGuardada = localStorage.getItem(`aulaPlusPerfil_${email}`);
-      
-      // Si no existe el perfil guardado para este correo, lo obligamos a llenarlo
-      if (!dataGuardada) {
-        setPerfilObligatorio(true);
-        setMostrarPerfil(true);
+    const verificarPerfil = async () => {
+      const sessionLocal = localStorage.getItem('aulaPlusSession');
+      if (sessionLocal) {
+        const sessionData = JSON.parse(sessionLocal);
+        const email = sessionData?.user?.email || sessionData?.email || 'default';
+        
+        // 1. Revisar caché local primero por rapidez
+        const dataGuardadaLocal = localStorage.getItem(`aulaPlusPerfil_${email}`);
+        
+        if (dataGuardadaLocal) {
+           // Ya está en memoria local, no pedirlo
+           return;
+        }
+
+        // 2. Si no está en local, revisar en Firebase (nube)
+        try {
+          const docRef = doc(db, 'teacher_settings', email);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists() && docSnap.data().memoriaEscolar?.escuela) {
+             // Ya existe en la nube, guardarlo en local para futuras visitas y no molestar al usuario
+             localStorage.setItem(`aulaPlusPerfil_${email}`, JSON.stringify(docSnap.data().memoriaEscolar));
+          } else {
+             // No existe en ningún lado, obligar a llenarlo
+             setPerfilObligatorio(true);
+             setMostrarPerfil(true);
+          }
+        } catch (error) {
+           console.error("Error verificando perfil en la nube:", error);
+           // Si falla la conexión, asumimos que debe llenarlo por precaución
+           setPerfilObligatorio(true);
+           setMostrarPerfil(true);
+        }
       }
-    }
+    };
+    
+    verificarPerfil();
   }, []);
 
   const manejarCierrePerfil = () => {
