@@ -225,10 +225,14 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     docRef.text(`Grado y Grupo: ${datosGrupo?.name}   |   Disciplina: ${datosGrupo?.subject}${enfasisTxt}`, 14, posY);
     posY += 8;
 
-    // Tabla de Actividades
+    // Tabla de Actividades con tipado fuerte
     const bodyData = actExportar.map(a => [
-      a.numero, a.titulo, a.descripcion, a.trimestre, a.fechaActividad
-    ]);
+      a.numero || '', 
+      a.titulo || '', 
+      a.descripcion || '', 
+      a.trimestre || '', 
+      a.fechaActividad || ''
+    ] as (string | number)[]);
 
     autoTable(docRef, {
       startY: posY,
@@ -347,12 +351,13 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     const actividadesSeleccionadas = evidencias.filter(e => excelActividades.includes(e.id));
     const headRows = ['No.', 'Nombre del Estudiante', ...actividadesSeleccionadas.map(a => `A${a.numero}\n${a.titulo.substring(0,10)}...`), 'Total'];
     
+    // Tipado fuerte para TypeScript
     const bodyData = alumnos.map(al => [
-      al.studentNumber,
-      al.fullName,
+      al.studentNumber || '',
+      al.fullName || '',
       ...actividadesSeleccionadas.map(() => ''),
       ''
-    ]);
+    ] as (string | number)[]);
 
     autoTable(docRef, {
       startY: posY,

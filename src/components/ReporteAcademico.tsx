@@ -199,7 +199,7 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
     doc.text(`Ciclo Escolar: ${grupo.schoolYear}   |   Trimestre Analizado: ${trimestreFiltro === 'anual' ? 'Todos' : trimestreFiltro}`, 14, 51);
     doc.text(`Grado y Grupo: ${grupo.name}   |   Disciplina: ${grupo.subject}${enfasisTxt}`, 14, 57);
 
-    // Generar Datos de Tabla
+    // Generar Datos de Tabla con validación estricta para TypeScript
     let pendientes = 0;
     const bodyData = evidenciasFiltradas.map(ev => {
       const cal = ev.calificaciones[alumnoSeleccionado.id] !== undefined ? ev.calificaciones[alumnoSeleccionado.id] : ev.puntajeMinimo;
@@ -207,12 +207,12 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
       if (!entregado) pendientes++;
       
       return [
-        ev.numero, 
-        ev.titulo, 
-        ev.fechaActividad, 
+        ev.numero || '', 
+        ev.titulo || '', 
+        ev.fechaActividad || '', 
         `${cal} / ${ev.puntajeMaximo}`, 
         entregado ? 'Entregada' : 'Pendiente'
-      ];
+      ] as (string | number)[];
     });
 
     autoTable(doc, {
