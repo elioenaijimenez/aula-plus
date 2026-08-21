@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { signInWithRedirect, getRedirectResult } from 'firebase/auth'; 
+import { signInWithRedirect, onAuthStateChanged } from 'firebase/auth'; 
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
@@ -13,20 +13,20 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   const [keyPlus, setKeyPlus] = useState('');
   const [aceptoTerminos, setAceptoTerminos] = useState(false);
   const [cargando, setCargando] = useState(false);
-  const [verificandoRedireccion, setVerificandoRedireccion] = useState(true);
+  
+  // Iniciamos en true para darle un segundo a Firebase de buscar la sesión en la memoria de la tablet
+  const [verificandoSesion, setVerificandoSesion] = useState(true);
 
-  // EFECTO RESCATISTA: Este código corre automáticamente cuando la página recarga al volver de Google.
+  // EL OBSERVADOR GLOBAL (A prueba de redirecciones)
   useEffect(() => {
-    const procesarRespuestaGoogle = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        
-        if (result && result.user) {
-          // ¡Atrapamos la llave con éxito tras la redirección!
-          const userEmail = result.user.email || '';
-          setEmail(userEmail);
-          if (result.user.displayName) setNombre(result.user.displayName);
+    const desuscribir = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // ¡Firebase encontró al usuario en la memoria!
+        const userEmail = user.email || '';
+        setEmail(userEmail);
+        if (user.displayName) setNombre(user.displayName);
 
+        try {
           // VERIFICACIÓN INTELIGENTE: Buscar si el correo ya tiene licencia activa
           const q = query(collection(db, 'keys'), where('correo', '==', userEmail), where('estado', '==', 'en uso'));
           const querySnapshot = await getDocs(q);
@@ -44,31 +44,34 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
               await updateDoc(doc(db, 'keys', docSnap.id), { estado: 'caducada' });
               alert("Tu KeyPlus ha caducado. Ingresa una nueva licencia.");
               setPaso(2);
+              setVerificandoSesion(false);
             } else {
               // LLAVE VÁLIDA: Acceso directo, saltando el formulario
               onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
-              setVerificandoRedireccion(false);
-              return; 
+              // No apagamos 'verificandoSesion' para que haga la transición suave al Dashboard
             }
           } else {
             // Es un usuario nuevo o no tiene llave activa
             setPaso(2);
+            setVerificandoSesion(false);
           }
+        } catch (error) {
+          console.error("Error validando licencia:", error);
+          setVerificandoSesion(false);
         }
-      } catch (error) {
-        console.error("Error al procesar la redirección:", error);
-        alert("Hubo un problema al validar tu cuenta de Google. Inténtalo de nuevo.");
+      } else {
+        // Definitivamente no hay usuario logueado, mostramos el botón
+        setVerificandoSesion(false);
       }
-      setVerificandoRedireccion(false);
-    };
+    });
 
-    procesarRespuestaGoogle();
+    // Limpiamos el observador si el componente se desmonta
+    return () => desuscribir();
   }, [onLogin]);
 
-  // Nuevo método de inicio que usa redirección completa (Amigable con móviles y tablets)
   const iniciarSesionGoogle = () => {
+    setCargando(true);
     try {
-      setCargando(true);
       signInWithRedirect(auth, googleProvider);
     } catch (error) {
       console.error("Error al iniciar redirección:", error);
@@ -123,12 +126,13 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
     setCargando(false);
   };
 
-  // Si está regresando de Google, mostramos pantalla de carga para evitar el "parpadeo" del botón
-  if (verificandoRedireccion) {
+  // PANTALLA DE ESPERA MIENTRAS EL OBSERVADOR TRABAJA
+  if (verificandoSesion) {
     return (
       <div className="login-bg" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-         <div className="loader" style={{ borderTopColor: 'var(--accent-blue)', width: '50px', height: '50px' }}></div>
-         <p style={{ color: 'white', marginTop: '1rem', fontWeight: 'bold' }}>Validando credenciales...</p>
+         <div className="loader" style={{ borderTopColor: 'var(--accent-blue)', width: '50px', height: '50px', marginBottom: '1.5rem' }}></div>
+         <h2 style={{ color: 'white', margin: 0 }}>Validando credenciales...</h2>
+         <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Conectando de forma segura con Google</p>
       </div>
     );
   }
@@ -145,7 +149,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         </div>
 
         {paso === 1 ? (
-          <div>
+          <div style={{ animation: 'fadeIn 0.3s' }}>
             <TutorialTooltip mensaje="Inicia sesión usando tu cuenta de Google." esBloque={true} posicion="top">
               <button onClick={iniciarSesionGoogle} disabled={cargando} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'white', color: '#333', display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center', border: '1px solid #ddd', opacity: cargando ? 0.7 : 1 }}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="22px" height="22px">
