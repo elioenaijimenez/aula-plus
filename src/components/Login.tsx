@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { signInWithRedirect, onAuthStateChanged } from 'firebase/auth'; 
+import { signInWithPopup, onAuthStateChanged } from 'firebase/auth'; 
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
@@ -14,20 +14,20 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
   const [aceptoTerminos, setAceptoTerminos] = useState(false);
   const [cargando, setCargando] = useState(false);
   
-  // Iniciamos en true para darle un segundo a Firebase de buscar la sesión en la memoria de la tablet
   const [verificandoSesion, setVerificandoSesion] = useState(true);
 
-  // EL OBSERVADOR GLOBAL (A prueba de redirecciones)
+  // Obligamos a Google a siempre mostrar la ventana de selección para evitar que se quede pegado
+  googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+  // OBSERVADOR GLOBAL: Revisa si ya entraste
   useEffect(() => {
     const desuscribir = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // ¡Firebase encontró al usuario en la memoria!
         const userEmail = user.email || '';
         setEmail(userEmail);
         if (user.displayName) setNombre(user.displayName);
 
         try {
-          // VERIFICACIÓN INTELIGENTE: Buscar si el correo ya tiene licencia activa
           const q = query(collection(db, 'keys'), where('correo', '==', userEmail), where('estado', '==', 'en uso'));
           const querySnapshot = await getDocs(q);
 
@@ -35,7 +35,6 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
             const docSnap = querySnapshot.docs[0];
             const data = docSnap.data();
             
-            // Verificar caducidad
             const expira = new Date(data.fechaCaducidad);
             expira.setMinutes(expira.getMinutes() + expira.getTimezoneOffset());
             const hoy = new Date();
@@ -46,12 +45,9 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
               setPaso(2);
               setVerificandoSesion(false);
             } else {
-              // LLAVE VÁLIDA: Acceso directo, saltando el formulario
               onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
-              // No apagamos 'verificandoSesion' para que haga la transición suave al Dashboard
             }
           } else {
-            // Es un usuario nuevo o no tiene llave activa
             setPaso(2);
             setVerificandoSesion(false);
           }
@@ -60,23 +56,26 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
           setVerificandoSesion(false);
         }
       } else {
-        // Definitivamente no hay usuario logueado, mostramos el botón
         setVerificandoSesion(false);
       }
     });
 
-    // Limpiamos el observador si el componente se desmonta
     return () => desuscribir();
   }, [onLogin]);
 
-  const iniciarSesionGoogle = () => {
+  const iniciarSesionGoogle = async () => {
     setCargando(true);
     try {
-      signInWithRedirect(auth, googleProvider);
-    } catch (error) {
-      console.error("Error al iniciar redirección:", error);
+      // Usamos Popup con manejo de errores estricto
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
+      console.error("Error Popup:", error);
       setCargando(false);
-      alert("No se pudo conectar con Google. Revisa tu conexión.");
+      if (error.code === 'auth/popup-blocked') {
+        alert("⚠️ Tu navegador bloqueó la ventana de inicio de sesión. Por favor, permite las ventanas emergentes (pop-ups) o usa la opción 'Añadir a la pantalla de inicio'.");
+      } else if (error.code !== 'auth/popup-closed-by-user') {
+        alert("Error al conectar con Google. Revisa tu conexión de red.");
+      }
     }
   };
 
@@ -126,7 +125,6 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
     setCargando(false);
   };
 
-  // PANTALLA DE ESPERA MIENTRAS EL OBSERVADOR TRABAJA
   if (verificandoSesion) {
     return (
       <div className="login-bg" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
