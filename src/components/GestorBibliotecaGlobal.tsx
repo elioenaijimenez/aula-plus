@@ -218,7 +218,12 @@ export default function GestorBibliotecaGlobal() {
               librosFiltrados.map(b => {
                 const estilo = obtenerEstiloCategoria(b.categoria);
                 return (
-                  <div key={b.id} className="activity-card" style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-input)', margin: 0 }}>
+                  <div 
+                    key={b.id} 
+                    className="activity-card hover-opacity" 
+                    onClick={() => window.open(b.url, '_blank')}
+                    style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-input)', margin: 0, cursor: 'pointer', position: 'relative' }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1 }}>
                       <div style={{ backgroundColor: estilo.bg, color: estilo.color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>
                         {estilo.icon}
@@ -232,10 +237,24 @@ export default function GestorBibliotecaGlobal() {
                       </div>
                     </div>
                     
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
-                      <button onClick={() => window.open(b.url, '_blank')} className="pill-btn" style={{ flex: 1, background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}>↗️ Probar Link</button>
-                      <button onClick={() => { setLibroEditando(b); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="pill-btn" style={{ flex: 1, padding: '0.4rem', background: 'var(--bg-panel)', fontSize: '0.85rem', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>✏️ Editar</button>
-                      <button onClick={() => eliminarLibro(b.id)} className="pill-btn" style={{ flex: 1, padding: '0.4rem', background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', fontSize: '0.85rem', border: 'none' }}>🗑 Borrar</button>
+                    {/* Botones de acción minimalistas alineados a la derecha */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setLibroEditando(b); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
+                        className="pill-btn" 
+                        title="Editar"
+                        style={{ padding: '0.5rem 1rem', background: 'var(--bg-panel)', fontSize: '1.1rem', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); eliminarLibro(b.id); }} 
+                        className="pill-btn" 
+                        title="Borrar"
+                        style={{ padding: '0.5rem 1rem', background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', fontSize: '1.1rem', border: 'none' }}
+                      >
+                        🗑
+                      </button>
                     </div>
                   </div>
                 );
