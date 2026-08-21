@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
+import jsPDF from 'jspdf';
 
 interface Grupo { id: string; name: string; grade: string; subject: string; emphasis: string; docenteEmail?: string; }
 interface MemoriaEscolar { escuela: string; ubicacion: string; docente: string; revisor: string; }
@@ -11,21 +12,25 @@ export default function PlaneadorDidactico() {
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
 
+  // 1. Estados de Memoria Escolar
   const [memoria, setMemoria] = useState<MemoriaEscolar>({ escuela: '', ubicacion: '', docente: '', revisor: '' });
   const [modoEdicionMemoria, setModoEdicionMemoria] = useState(true);
   const [guardandoMemoria, setGuardandoMemoria] = useState(false);
 
+  // 2. Estados de Configuración (Fechas y Días)
   const [fechaEntrega, setFechaEntrega] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [diasClase, setDiasClase] = useState<string[]>([]);
   const [duracion, setDuracion] = useState('50');
   
+  // 3. Estados Pedagógicos
   const [instrucciones, setInstrucciones] = useState('');
   const [contenido, setContenido] = useState('');
   const [pda, setPda] = useState('');
   const [ejes, setEjes] = useState('');
 
+  // 4. Estados de Generación
   const [generando, setGenerando] = useState(false);
   const [resultadoIA, setResultadoIA] = useState('');
 
@@ -199,6 +204,77 @@ export default function PlaneadorDidactico() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
+  const exportarPDF = () => {
+    if (!resultadoIA) return;
+    const grupo = grupos.find(g => g.id === grupoSeleccionado);
+    const doc = new jsPDF();
+    
+    const marginX = 14;
+    let posY = 20;
+    const pageHeight = doc.internal.pageSize.height;
+
+    // Encabezado
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(28, 81, 255); // Azul Aula+
+    doc.text("PLANEACIÓN DIDÁCTICA", 105, posY, { align: "center" });
+    posY += 10;
+
+    // Tabla de Membrete simulada (Texto puro estructurado)
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Escuela: ${memoria.escuela}`, marginX, posY);
+    doc.text(`Ubicación: ${memoria.ubicacion}`, 105, posY);
+    posY += 6;
+    doc.text(`Disciplina: ${grupo?.subject}`, marginX, posY);
+    doc.text(`Énfasis: ${grupo?.subject === 'Tecnología' && grupo?.emphasis ? grupo.emphasis : 'N/A'}`, 105, posY);
+    posY += 6;
+    doc.text(`Grado y Grupo: ${grupo?.name}`, marginX, posY);
+    doc.text(`Fecha de Entrega: ${fechaEntrega}`, 105, posY);
+    posY += 8;
+
+    // Línea separadora
+    doc.setDrawColor(200, 200, 200);
+    doc.line(marginX, posY, 196, posY);
+    posY += 8;
+
+    // Limpieza básica de Markdown para PDF
+    const textoLimpio = resultadoIA.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1');
+    
+    // Dividir el texto generado por IA en líneas que quepan en la página
+    const splitText = doc.splitTextToSize(textoLimpio, 180);
+    
+    splitText.forEach((line: string) => {
+      if (posY > pageHeight - 40) { // Deja espacio inferior para firmas o nueva página
+        doc.addPage();
+        posY = 20;
+      }
+      doc.text(line, marginX, posY);
+      posY += 6; // Espaciado entre líneas
+    });
+
+    // Agregar Firmas al final
+    if (posY > pageHeight - 40) {
+      doc.addPage();
+      posY = 20;
+    }
+    posY += 20;
+    doc.text("___________________________", 50, posY, { align: "center" });
+    doc.text("___________________________", 150, posY, { align: "center" });
+    posY += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text("Docente", 50, posY, { align: "center" });
+    doc.text("Revisa", 150, posY, { align: "center" });
+    posY += 5;
+    doc.setFont("helvetica", "normal");
+    doc.text(memoria.docente, 50, posY, { align: "center" });
+    doc.text(memoria.revisor, 150, posY, { align: "center" });
+
+    // Descarga nativa en el dispositivo
+    doc.save(`Planeacion_${grupo?.name}_${fechaInicio}.pdf`);
+  };
+
   const paso2Habilitado = grupoSeleccionado !== '';
   const paso3Habilitado = paso2Habilitado && fechaInicio !== '' && fechaFin !== '' && fechaEntrega !== '' && diasClase.length > 0 && duracion !== '';
 
@@ -305,10 +381,16 @@ export default function PlaneadorDidactico() {
 
       {/* PANEL DERECHO: VISOR Y CARGA */}
       <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)', borderRadius: '24px', border: '1px solid var(--border-color)', minHeight: '600px' }}>
-        <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        
+        {/* DISEÑO DE BOTONES DE DESCARGA (Minimalista y compacto) */}
+        <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <span style={{ fontWeight: 'bold', color: 'var(--text-muted)' }}>Vista Previa del Documento</span>
-          <TutorialTooltip mensaje="Descarga el documento completamente formateado, membretado y listo para imprimirse o firmarse." posicion="left">
-            <button onClick={exportarWord} disabled={!resultadoIA} className="pill-btn" style={{ background: resultadoIA ? 'var(--accent-blue)' : 'var(--bg-input)', color: resultadoIA ? 'white' : 'var(--text-muted)', border: 'none' }}>📄 Descargar Word</button>
+          <TutorialTooltip mensaje="Descarga el documento completamente formateado, membretado y listo para imprimirse en el formato que prefieras." posicion="left">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: resultadoIA ? 1 : 0.4, pointerEvents: resultadoIA ? 'auto' : 'none' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Descargar:</span>
+              <button onClick={exportarWord} className="pill-btn" style={{ backgroundColor: '#185ABD', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '8px' }} title="Descargar Documento de Word">📄 .doc</button>
+              <button onClick={exportarPDF} className="pill-btn" style={{ backgroundColor: '#E53935', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '8px' }} title="Descargar en PDF">📕 .pdf</button>
+            </div>
           </TutorialTooltip>
         </div>
         

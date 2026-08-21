@@ -4,6 +4,8 @@ import { db } from '../services/firebase';
 import CalificarEvidencia from './CalificarEvidencia';
 import TutorialTooltip from './TutorialTooltip';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Evidencia { id: string; titulo: string; descripcion: string; puntajeMinimo: number; puntajeMaximo: number; fechaActividad: string; trimestre: string; numero?: number; createdAt?: any; calificaciones?: Record<string, number>; }
 interface Alumno { id: string; fullName: string; studentNumber: number; }
@@ -112,12 +114,17 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     else setExcelActividades([...excelActividades, id]);
   };
 
-  const exportarWord = () => {
+  /* ------------------- EXPORTAR LISTA DE ACTIVIDADES ------------------- */
+  const obtenerActividadesAExportar = () => {
     let actExportar = [];
     if (tipoExport === 'todo') actExportar = evidencias;
     else if (['1','2','3'].includes(tipoExport)) actExportar = evidencias.filter(e => e.trimestre === tipoExport);
     else actExportar = evidencias.filter(e => seleccionManual.includes(e.id));
-    
+    return actExportar;
+  };
+
+  const exportarWord = () => {
+    const actExportar = obtenerActividadesAExportar();
     if(actExportar.length === 0) { alert("No hay actividades en esta selección."); return; }
 
     const sessionLocal = localStorage.getItem('aulaPlusSession');
@@ -177,6 +184,71 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     setModalWord(false); setSeleccionManual([]);
   };
 
+  const exportarPDF = () => {
+    const actExportar = obtenerActividadesAExportar();
+    if(actExportar.length === 0) { alert("No hay actividades en esta selección."); return; }
+
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
+    const pLocal = localStorage.getItem('aulaPlusPerfil');
+    const perfilData = pLocal ? JSON.parse(pLocal) : null;
+
+    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
+    const escuela = perfilData?.escuela || 'Escuela no registrada';
+    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    const enfasisTxt = datosGrupo?.emphasis ? ` - Énfasis: ${datosGrupo.emphasis}` : '';
+
+    const docRef = new jsPDF();
+    let posY = 15;
+
+    // Membrete
+    docRef.setFontSize(16);
+    docRef.setTextColor(28, 81, 255);
+    docRef.text(escuela, 105, posY, { align: 'center' });
+    posY += 6;
+    docRef.setFontSize(12);
+    docRef.setTextColor(50, 50, 50);
+    docRef.text(`Profesor(a): ${nombreDocente}`, 105, posY, { align: 'center' });
+    posY += 5;
+    docRef.setFontSize(10);
+    docRef.text(ubicacion, 105, posY, { align: 'center' });
+    posY += 5;
+    docRef.setDrawColor(200, 200, 200);
+    docRef.line(14, posY, 196, posY);
+    posY += 8;
+
+    // Datos del Grupo
+    docRef.setFontSize(11);
+    docRef.setTextColor(0, 0, 0);
+    docRef.text(`Ciclo Escolar: ${datosGrupo?.schoolYear || '2026-2027'}`, 14, posY);
+    posY += 6;
+    docRef.text(`Grado y Grupo: ${datosGrupo?.name}   |   Disciplina: ${datosGrupo?.subject}${enfasisTxt}`, 14, posY);
+    posY += 8;
+
+    // Tabla de Actividades
+    const bodyData = actExportar.map(a => [
+      a.numero, a.titulo, a.descripcion, a.trimestre, a.fechaActividad
+    ]);
+
+    autoTable(docRef, {
+      startY: posY,
+      head: [['No.', 'Título de Actividad', 'Descripción', 'Trim.', 'Fecha']],
+      body: bodyData,
+      theme: 'grid',
+      headStyles: { fillColor: [226, 232, 240], textColor: [51, 51, 51] },
+      columnStyles: { 
+        0: { halign: 'center', cellWidth: 10 }, 
+        1: { cellWidth: 40 },
+        3: { halign: 'center', cellWidth: 15 }, 
+        4: { halign: 'center', cellWidth: 25 } 
+      }
+    });
+
+    docRef.save(`Actividades_${datosGrupo?.name}.pdf`);
+    setModalWord(false); setSeleccionManual([]);
+  };
+
+  /* ------------------- EXPORTAR LISTA DE COTEJO ------------------- */
   const exportarListaCotejo = () => {
     if(excelActividades.length === 0) { alert("Selecciona al menos una actividad para evaluar."); return; }
 
@@ -240,10 +312,63 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     link.href = URL.createObjectURL(blob);
     link.setAttribute('download', `ListaCotejo_${datosGrupo?.name}_T${excelTrimestre}.doc`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
-    
     setModalListaCotejo(false); setExcelActividades([]);
   };
 
+  const exportarListaCotejoPDF = () => {
+    if(excelActividades.length === 0) { alert("Selecciona al menos una actividad para evaluar."); return; }
+
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
+    const pLocal = localStorage.getItem('aulaPlusPerfil');
+    const perfilData = pLocal ? JSON.parse(pLocal) : null;
+
+    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
+    const escuela = perfilData?.escuela || 'Escuela no registrada';
+    const enfasisTxt = datosGrupo?.emphasis ? ` - Énfasis: ${datosGrupo.emphasis}` : '';
+
+    // Documento en formato Horizontal (Landscape)
+    const docRef = new jsPDF('l', 'mm', 'a4'); 
+    let posY = 15;
+
+    docRef.setFontSize(14);
+    docRef.setTextColor(28, 81, 255);
+    docRef.text(escuela, 148.5, posY, { align: 'center' }); // 148.5 es el centro en A4 Landscape
+    posY += 6;
+    docRef.setFontSize(12);
+    docRef.setTextColor(0, 0, 0);
+    docRef.text(`Lista de Cotejo - Trimestre ${excelTrimestre}`, 148.5, posY, { align: 'center' });
+    posY += 10;
+    
+    docRef.setFontSize(10);
+    docRef.text(`Docente: ${nombreDocente}   |   Grupo: ${datosGrupo?.name}   |   Disciplina: ${datosGrupo?.subject}${enfasisTxt}`, 14, posY);
+    posY += 8;
+
+    const actividadesSeleccionadas = evidencias.filter(e => excelActividades.includes(e.id));
+    const headRows = ['No.', 'Nombre del Estudiante', ...actividadesSeleccionadas.map(a => `A${a.numero}\n${a.titulo.substring(0,10)}...`), 'Total'];
+    
+    const bodyData = alumnos.map(al => [
+      al.studentNumber,
+      al.fullName,
+      ...actividadesSeleccionadas.map(() => ''),
+      ''
+    ]);
+
+    autoTable(docRef, {
+      startY: posY,
+      head: [headRows],
+      body: bodyData,
+      theme: 'grid',
+      headStyles: { fillColor: [226, 232, 240], textColor: [51, 51, 51], halign: 'center', fontSize: 8 },
+      styles: { fontSize: 8 },
+      columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 1: { cellWidth: 60 } }
+    });
+
+    docRef.save(`ListaCotejo_${datosGrupo?.name}_T${excelTrimestre}.pdf`);
+    setModalListaCotejo(false); setExcelActividades([]);
+  };
+
+  /* ------------------- EXPORTAR CONCENTRADO EXCEL ------------------- */
   const exportarConcentradoExcel = () => {
     setExportandoConcentrado(true);
     try {
@@ -347,7 +472,7 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
           </TutorialTooltip>
 
           <TutorialTooltip mensaje="Obtén el registro oficial en Word de todas las actividades.">
-            <button onClick={() => setModalWord(true)} className="pill-btn" style={{ background: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)' }}>📄 Exportar a Word</button>
+            <button onClick={() => setModalWord(true)} className="pill-btn" style={{ background: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)' }}>📄 Exportar Actividades</button>
           </TutorialTooltip>
 
           <TutorialTooltip mensaje="Añade un nuevo criterio de evaluación o tarea para tu grupo.">
@@ -397,12 +522,12 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
         </div>
       )}
 
-      {/* MODALES EXPORTACIÓN (Sin cambios estructurales) */}
+      {/* MODALES EXPORTACIÓN */}
       {modalWord && (
         <div className="modal-overlay" style={{ zIndex: 1000 }}>
           <div className="modal-content" style={{ maxWidth: '500px' }}>
-            <h3 style={{ marginTop: 0, fontSize: '1.4rem' }}>Exportar a MS Word</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Selecciona qué actividades quieres incluir en el documento oficial (.doc).</p>
+            <h3 style={{ marginTop: 0, fontSize: '1.4rem' }}>Exportar Actividades</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Selecciona qué actividades quieres incluir en el documento oficial.</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', margin: '1.5rem 0' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}><input type="radio" name="exp" checked={tipoExport==='todo'} onChange={()=>setTipoExport('todo')} /> Todo el ciclo escolar</label>
@@ -411,6 +536,7 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
               <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}><input type="radio" name="exp" checked={tipoExport==='3'} onChange={()=>setTipoExport('3')} /> Solo Trimestre 3</label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}><input type="radio" name="exp" checked={tipoExport==='manual'} onChange={()=>setTipoExport('manual')} /> Seleccionar manualmente</label>
             </div>
+            
             {tipoExport === 'manual' && (
               <div style={{ backgroundColor: 'var(--bg-input)', padding: '1rem', borderRadius: '12px', maxHeight: '150px', overflowY: 'auto', marginBottom: '1.5rem' }}>
                 {evidencias.map(e => (
@@ -420,9 +546,12 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
                 ))}
               </div>
             )}
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={exportarWord} className="pill-btn" style={{ flex: 1, backgroundColor: 'var(--accent-blue)', color: 'white' }}>Descargar .doc</button>
-              <button onClick={() => {setModalWord(false); setSeleccionManual([]);}} className="pill-btn" style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>Cancelar</button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Descargar:</span>
+              <button onClick={exportarWord} className="pill-btn" style={{ flex: 1, backgroundColor: '#185ABD', color: 'white', padding: '0.6rem' }} title="Descargar en Word">📄 .doc</button>
+              <button onClick={exportarPDF} className="pill-btn" style={{ flex: 1, backgroundColor: '#E53935', color: 'white', padding: '0.6rem' }} title="Descargar en PDF">📕 .pdf</button>
+              <button onClick={() => {setModalWord(false); setSeleccionManual([]);}} className="pill-btn" style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)', padding: '0.6rem' }}>Cancelar</button>
             </div>
           </div>
         </div>
@@ -432,7 +561,7 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
         <div className="modal-overlay" style={{ zIndex: 1000 }}>
           <div className="modal-content" style={{ maxWidth: '500px' }}>
             <h3 style={{ marginTop: 0, fontSize: '1.4rem', color: 'var(--accent-green)' }}>📋 Generar Lista de Cotejo</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Crea un documento de Word (Horizontal) con los alumnos y las actividades seleccionadas para evaluar en clase.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Crea un documento (Horizontal) con los alumnos y las actividades seleccionadas para evaluar en clase.</p>
             
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>1. Selecciona el Trimestre</label>
@@ -459,9 +588,11 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={exportarListaCotejo} disabled={excelActividades.length === 0} className="pill-btn" style={{ flex: 1, backgroundColor: 'var(--accent-green)', color: '#000' }}>Descargar .doc</button>
-              <button onClick={() => {setModalListaCotejo(false); setExcelActividades([]);}} className="pill-btn" style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>Cancelar</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Descargar:</span>
+              <button onClick={exportarListaCotejo} disabled={excelActividades.length === 0} className="pill-btn" style={{ flex: 1, backgroundColor: '#185ABD', color: 'white', padding: '0.6rem' }} title="Descargar en Word">📄 .doc</button>
+              <button onClick={exportarListaCotejoPDF} disabled={excelActividades.length === 0} className="pill-btn" style={{ flex: 1, backgroundColor: '#E53935', color: 'white', padding: '0.6rem' }} title="Descargar en PDF">📕 .pdf</button>
+              <button onClick={() => {setModalListaCotejo(false); setExcelActividades([]);}} className="pill-btn" style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)', padding: '0.6rem' }}>Cancelar</button>
             </div>
           </div>
         </div>

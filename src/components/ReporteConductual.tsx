@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, getDocs, orderBy, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
+import jsPDF from 'jspdf';
 
 interface Alumno { id: string; fullName: string; studentNumber: number; }
 interface Incidencia {
@@ -152,6 +153,117 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
+  const exportarBitacoraPDF = (inc: Incidencia) => {
+    const docRef = new jsPDF();
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
+    const pLocal = localStorage.getItem('aulaPlusPerfil');
+    const perfilData = pLocal ? JSON.parse(pLocal) : null;
+
+    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
+    const escuela = perfilData?.escuela || 'Escuela no registrada';
+    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    const ubicacionStr = ubicacion.includes('Morelos') ? ubicacion : `${ubicacion}, Morelos`;
+
+    let posY = 20;
+
+    // Folio
+    docRef.setFontSize(9);
+    docRef.setTextColor(85, 85, 85);
+    docRef.text(`FOLIO INTERNO: ${inc.folio}`, 196, posY, { align: 'right' });
+    posY += 10;
+
+    // Encabezado
+    docRef.setFontSize(16);
+    docRef.setFont("helvetica", "bold");
+    docRef.setTextColor(28, 81, 255);
+    docRef.text("BITÁCORA DOCENTE", 105, posY, { align: 'center' });
+    posY += 6;
+    docRef.setFontSize(11);
+    docRef.setFont("helvetica", "normal");
+    docRef.setTextColor(51, 51, 51);
+    docRef.text("(Registro de incidencias, eventualidades y seguimiento)", 105, posY, { align: 'center' });
+    posY += 15;
+
+    // Función auxiliar para imprimir secciones con cajas grises
+    const printSection = (title: string, content: string | string[], isTable: boolean = false) => {
+      docRef.setFillColor(226, 232, 240);
+      docRef.rect(14, posY - 4, 182, 7, 'F');
+      docRef.setFontSize(10);
+      docRef.setFont("helvetica", "bold");
+      docRef.setTextColor(0, 0, 0);
+      docRef.text(title, 16, posY + 1);
+      posY += 8;
+
+      docRef.setFont("helvetica", "normal");
+      if (isTable && Array.isArray(content)) {
+        content.forEach(line => {
+          docRef.text(line, 14, posY);
+          posY += 6;
+        });
+      } else if (typeof content === 'string') {
+        const splitText = docRef.splitTextToSize(content, 182);
+        splitText.forEach((line: string) => {
+          if (posY > 270) { docRef.addPage(); posY = 20; }
+          docRef.text(line, 14, posY);
+          posY += 6;
+        });
+      }
+      posY += 4;
+    };
+
+    printSection("1. DATOS GENERALES", [
+      `Lugar y fecha: ${ubicacionStr}, a ${formatearFecha(inc.fecha)}`,
+      `Nombre de la escuela: ${escuela}`,
+      `Nombre del Docente: ${nombreDocente}`,
+      `Nombre de la alumna o alumno: ${inc.nombreAlumno}`,
+      `Grado y grupo: ${grupo.name}`,
+      `Tipo de Eventualidad: ${inc.tipo}`
+    ], true);
+
+    printSection("2. DESCRIPCIÓN DE HECHOS", inc.descripcion);
+    printSection("3. MEDIDAS DE PREVENCIÓN APLICADAS", inc.medidas);
+    printSection("4. COMPROMISOS DE LOS TUTORES (Acuerdos)", inc.compromisos);
+
+    // Firmas
+    if (posY > 230) { docRef.addPage(); posY = 20; }
+
+    docRef.setFillColor(226, 232, 240);
+    docRef.rect(14, posY - 4, 182, 7, 'F');
+    docRef.setFontSize(10);
+    docRef.setFont("helvetica", "bold");
+    docRef.text("5. FIRMAS DE VALIDACIÓN", 16, posY + 1);
+    posY += 25;
+
+    docRef.setFont("helvetica", "normal");
+    docRef.text("_________________________", 40, posY, { align: 'center' });
+    docRef.text("_________________________", 105, posY, { align: 'center' });
+    docRef.text("_________________________", 170, posY, { align: 'center' });
+    posY += 5;
+    docRef.setFontSize(9);
+    docRef.text(`${nombreDocente}`, 40, posY, { align: 'center' });
+    docRef.text("Firma de Madre, Padre o Tutor", 105, posY, { align: 'center' });
+    docRef.text("Directivo o Autoridad Escolar", 170, posY, { align: 'center' });
+    posY += 5;
+    docRef.text("Docente", 40, posY, { align: 'center' });
+
+    // Footer de Privacidad
+    posY += 20;
+    docRef.setDrawColor(200, 200, 200);
+    docRef.line(14, posY, 196, posY);
+    posY += 5;
+    docRef.setFontSize(7);
+    docRef.setTextColor(119, 119, 119);
+    const privacyText = "AVISO DE PRIVACIDAD Y PROTECCIÓN DE DATOS: Los datos personales proporcionados serán protegidos en términos de la Ley de Protección de Datos Personales en Posesión de Sujetos Obligados para el Estado de Morelos, y serán utilizados exclusivamente para fines estadísticos, de prevención, seguimiento pedagógico y protección del interés superior de la niñez. Se han omitido los apellidos de terceros involucrados para salvaguardar su derecho constitucional a la privacidad e intimidad.";
+    const splitPrivacy = docRef.splitTextToSize(privacyText, 182);
+    splitPrivacy.forEach((line: string) => {
+       docRef.text(line, 14, posY);
+       posY += 4;
+    });
+
+    docRef.save(`Bitacora_${inc.nombreAlumno}_${inc.fecha}.pdf`);
+  };
+
   const conteoPorAlumno: Record<string, { nombre: string, total: number }> = {};
   incidencias.forEach(inc => {
     if(!conteoPorAlumno[inc.idAlumno]) conteoPorAlumno[inc.idAlumno] = { nombre: inc.nombreAlumno, total: 0 };
@@ -275,7 +387,11 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
                 </div>
                 
                 <TutorialTooltip mensaje="Descarga el acta lista para imprimir y solicitar la firma de Trabajo Social o Padres de familia." posicion="left">
-                  <button onClick={() => exportarBitacoraWord(inc)} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white' }}>📄 Imprimir Acta Oficial</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Descargar:</span>
+                    <button onClick={() => exportarBitacoraWord(inc)} className="pill-btn" style={{ backgroundColor: '#185ABD', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '8px' }} title="Descargar en Word">📄 .doc</button>
+                    <button onClick={() => exportarBitacoraPDF(inc)} className="pill-btn" style={{ backgroundColor: '#E53935', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '8px' }} title="Descargar en PDF">📕 .pdf</button>
+                  </div>
                 </TutorialTooltip>
               </div>
 

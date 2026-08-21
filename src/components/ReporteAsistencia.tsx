@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { collection, query, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Alumno { 
   id: string; 
@@ -251,6 +253,143 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
     setModalExportar(false);
   };
 
+  const generarDocumentoPDF = async () => {
+    if (!alumnoSeleccionado) return;
+    if (mesesSeleccionados.length === 0) { alert("Selecciona al menos un mes para exportar."); return; }
+
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
+    const pLocal = localStorage.getItem('aulaPlusPerfil');
+    const perfilData = pLocal ? JSON.parse(pLocal) : null;
+
+    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
+    const escuela = perfilData?.escuela || 'Escuela no registrada';
+    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    const enfasisTxt = grupo.emphasis ? ` - Énfasis: ${grupo.emphasis}` : '';
+
+    let registrosAExportar = alumnoSeleccionado.registroCompleto.filter(r => mesesSeleccionados.includes(obtenerMesAnio(r.fecha)));
+    if (tipoExportacion === 'citatorio') {
+      registrosAExportar = registrosAExportar.filter(r => r.tipo === 'F' || r.tipo === 'R');
+    }
+
+    const docRef = new jsPDF();
+    let posY = 15;
+
+    // Encabezado
+    docRef.setFontSize(16);
+    docRef.setTextColor(28, 81, 255);
+    docRef.text(escuela, 105, posY, { align: 'center' });
+    posY += 7;
+    docRef.setFontSize(11);
+    docRef.setTextColor(50, 50, 50);
+    docRef.text(`Profesor(a): ${nombreDocente}`, 105, posY, { align: 'center' });
+    posY += 5;
+    docRef.setFontSize(9);
+    docRef.text(ubicacion, 105, posY, { align: 'center' });
+    posY += 4;
+    
+    docRef.setDrawColor(200, 200, 200);
+    docRef.line(14, posY, 196, posY);
+    posY += 8;
+
+    // Datos del Alumno
+    docRef.setFontSize(12);
+    docRef.setTextColor(0, 0, 0);
+    docRef.text(`Alumno(a): ${alumnoSeleccionado.fullName}`, 14, posY);
+    posY += 6;
+    docRef.setFontSize(10);
+    docRef.text(`Grupo: ${grupo.name}   |   Disciplina: ${grupo.subject}${enfasisTxt}`, 14, posY);
+    posY += 6;
+    docRef.text(`Porcentaje Global de Asistencia: ${alumnoSeleccionado.porcentaje.toFixed(1)}%`, 14, posY);
+    posY += 10;
+
+    // Título del tipo de documento
+    docRef.setFontSize(14);
+    if (tipoExportacion === 'citatorio') {
+      docRef.setTextColor(178, 0, 0);
+      docRef.text("Citatorio por Inasistencias y Retardos", 14, posY);
+      posY += 8;
+      docRef.setFontSize(10);
+      docRef.setTextColor(50, 50, 50);
+      docRef.text("Por medio de la presente, se hace de su conocimiento el historial de inasistencias del alumno(a).", 14, posY);
+      posY += 5;
+      docRef.text("Es indispensable comprender que la asistencia regular a clases es determinante para el éxito académico.", 14, posY);
+    } else {
+      docRef.setTextColor(28, 81, 255);
+      docRef.text("Historial General de Asistencia", 14, posY);
+      posY += 8;
+      docRef.setFontSize(10);
+      docRef.setTextColor(50, 50, 50);
+      docRef.text("Se expide el presente documento para informar sobre el registro detallado de asistencia", 14, posY);
+      posY += 5;
+      docRef.text("del alumno(a) durante los meses seleccionados, reflejando su compromiso y constancia.", 14, posY);
+    }
+    posY += 10;
+
+    // Tabla de Registros
+    const bodyData = registrosAExportar.map(dia => [formatearFecha(dia.fecha), dia.estado]);
+    
+    autoTable(docRef, {
+      startY: posY,
+      head: [['Fecha', 'Estatus']],
+      body: bodyData,
+      theme: 'grid',
+      headStyles: { fillColor: [226, 232, 240], textColor: [51, 51, 51] },
+      didParseCell: function(data) {
+        if (data.section === 'body' && data.column.index === 1) {
+          if (data.cell.raw === 'Falta') data.cell.styles.textColor = [178, 0, 0];
+          else if (data.cell.raw === 'Retardo') data.cell.styles.textColor = [178, 128, 0];
+          else if (data.cell.raw === 'Presente') data.cell.styles.textColor = [30, 123, 52];
+          else if (data.cell.raw === 'Justificado') data.cell.styles.textColor = [28, 81, 255];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    let finalY = (docRef as any).lastAutoTable.finalY + 15;
+    const pageHeight = docRef.internal.pageSize.height;
+
+    // Añadir carta de compromiso si es citatorio
+    if (tipoExportacion === 'citatorio') {
+      if (finalY > pageHeight - 50) { docRef.addPage(); finalY = 20; }
+      docRef.setFillColor(230, 240, 255);
+      docRef.rect(14, finalY, 182, 20, 'F');
+      docRef.setDrawColor(28, 81, 255);
+      docRef.setLineWidth(1);
+      docRef.line(14, finalY, 14, finalY + 20);
+      
+      docRef.setFontSize(10);
+      docRef.setTextColor(0, 0, 0);
+      docRef.setFont("helvetica", "bold");
+      docRef.text("CARTA DE COMPROMISO:", 18, finalY + 6);
+      docRef.setFont("helvetica", "normal");
+      docRef.text("Al firmar este documento, estoy enterado(a) de la situación actual de mi hijo(a) y me", 18, finalY + 12);
+      docRef.text("comprometo a apoyarlo(a) asegurando su asistencia puntual y regular.", 18, finalY + 17);
+      finalY += 30;
+    }
+
+    // Firmas
+    if (finalY > pageHeight - 40) { docRef.addPage(); finalY = 20; }
+    finalY += 20;
+    docRef.setTextColor(0, 0, 0);
+    docRef.text("_____________________________________", 105, finalY, { align: 'center' });
+    docRef.text("Nombre y Firma de Enterado (Padre / Tutor)", 105, finalY + 6, { align: 'center' });
+    docRef.setFontSize(9);
+    docRef.setTextColor(100, 100, 100);
+    docRef.text("Fecha de firma: ____ / ____________ / ______", 105, finalY + 12, { align: 'center' });
+
+    docRef.save(`ReporteAsistencia_${alumnoSeleccionado.fullName}.pdf`);
+
+    if (tipoExportacion === 'citatorio') {
+      const fechaHoy = obtenerFechaLocal();
+      const refAlumno = doc(db, `groups/${idGrupo}/students`, alumnoSeleccionado.id);
+      await updateDoc(refAlumno, { lastCitationDate: fechaHoy, lastCitationFaults: alumnoSeleccionado.f, lastCitationRetardos: alumnoSeleccionado.r });
+      setStatsGenerales(prev => prev.map(a => a.id === alumnoSeleccionado.id ? { ...a, lastCitationDate: fechaHoy, lastCitationFaults: alumnoSeleccionado.f, lastCitationRetardos: alumnoSeleccionado.r } : a));
+      setAlumnoSeleccionado({ ...alumnoSeleccionado, lastCitationDate: fechaHoy, lastCitationFaults: alumnoSeleccionado.f, lastCitationRetardos: alumnoSeleccionado.r });
+    }
+    setModalExportar(false);
+  };
+
   const promedioAsistenciaGrupal = statsGenerales.length > 0 ? statsGenerales.reduce((acc, st) => acc + st.porcentaje, 0) / statsGenerales.length : 0;
   const focosRojos = statsGenerales.filter(st => st.f >= 3).sort((a,b) => b.f - a.f);
 
@@ -286,9 +425,11 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={generarDocumentoWord} className="pill-btn" style={{ flex: 1, backgroundColor: 'var(--accent-blue)', color: 'white' }}>Generar Word</button>
-              <button onClick={() => setModalExportar(false)} className="pill-btn" style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>Cancelar</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Descargar:</span>
+              <button onClick={generarDocumentoWord} className="pill-btn" style={{ flex: 1, backgroundColor: '#185ABD', color: 'white', padding: '0.6rem' }} title="Descargar en Word">📄 .doc</button>
+              <button onClick={generarDocumentoPDF} className="pill-btn" style={{ flex: 1, backgroundColor: '#E53935', color: 'white', padding: '0.6rem' }} title="Descargar en PDF">📕 .pdf</button>
+              <button onClick={() => setModalExportar(false)} className="pill-btn" style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)', padding: '0.6rem' }}>Cancelar</button>
             </div>
           </div>
         </div>

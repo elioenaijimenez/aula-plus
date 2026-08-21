@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { collection, query, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Alumno { id: string; fullName: string; studentNumber: number; }
 interface Evidencia { id: string; titulo: string; descripcion: string; trimestre: string; fechaActividad: string; puntajeMinimo: number; puntajeMaximo: number; calificaciones: Record<string, number>; numero?: number; createdAt?: any; }
@@ -159,6 +161,101 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
+  const exportarKardexPDF = () => {
+    if (!alumnoSeleccionado) return;
+    const doc = new jsPDF();
+    
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
+    const pLocal = localStorage.getItem('aulaPlusPerfil');
+    const perfilData = pLocal ? JSON.parse(pLocal) : null;
+
+    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
+    const escuela = perfilData?.escuela || 'Escuela no registrada';
+    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    const enfasisTxt = grupo.emphasis ? ` - Énfasis: ${grupo.emphasis}` : '';
+
+    // Encabezado
+    doc.setFontSize(16);
+    doc.setTextColor(28, 81, 255);
+    doc.text(escuela, 105, 15, { align: 'center' });
+    
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`Profesor(a): ${nombreDocente}`, 105, 22, { align: 'center' });
+    doc.setFontSize(9);
+    doc.text(ubicacion, 105, 27, { align: 'center' });
+    
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, 30, 196, 30);
+
+    // Datos del alumno
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text("Kardex de Avance Académico", 14, 38);
+    
+    doc.setFontSize(10);
+    doc.text(`Alumno(a): ${alumnoSeleccionado.fullName}`, 14, 45);
+    doc.text(`Ciclo Escolar: ${grupo.schoolYear}   |   Trimestre Analizado: ${trimestreFiltro === 'anual' ? 'Todos' : trimestreFiltro}`, 14, 51);
+    doc.text(`Grado y Grupo: ${grupo.name}   |   Disciplina: ${grupo.subject}${enfasisTxt}`, 14, 57);
+
+    // Generar Datos de Tabla
+    let pendientes = 0;
+    const bodyData = evidenciasFiltradas.map(ev => {
+      const cal = ev.calificaciones[alumnoSeleccionado.id] !== undefined ? ev.calificaciones[alumnoSeleccionado.id] : ev.puntajeMinimo;
+      const entregado = cal > ev.puntajeMinimo;
+      if (!entregado) pendientes++;
+      
+      return [
+        ev.numero, 
+        ev.titulo, 
+        ev.fechaActividad, 
+        `${cal} / ${ev.puntajeMaximo}`, 
+        entregado ? 'Entregada' : 'Pendiente'
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 65,
+      head: [['#', 'Actividad', 'Fecha', 'Calificación', 'Estatus']],
+      body: bodyData,
+      theme: 'grid',
+      headStyles: { fillColor: [226, 232, 240], textColor: [51, 51, 51] },
+      didParseCell: function(data) {
+        if (data.section === 'body' && data.column.index === 4) {
+          if (data.cell.raw === 'Entregada') {
+            data.cell.styles.textColor = [30, 123, 52]; 
+            data.cell.styles.fontStyle = 'bold';
+          } else {
+            data.cell.styles.textColor = [178, 0, 0]; 
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+    });
+
+    // Mensaje Pedagógico
+    let finalY = (doc as any).lastAutoTable.finalY + 15;
+    doc.setFontSize(11);
+    if (pendientes > 0) {
+      doc.setTextColor(178, 0, 0);
+      doc.text("¡Aún estás a tiempo!", 14, finalY);
+      doc.setTextColor(50, 50, 50);
+      doc.setFontSize(10);
+      doc.text(`Tienes ${pendientes} actividades pendientes. Te invito a realizarlas y entregarlas lo`, 14, finalY + 6);
+      doc.text(`más pronto posible para mejorar tu promedio. ¡Tú puedes lograrlo!`, 14, finalY + 11);
+    } else {
+      doc.setTextColor(30, 123, 52);
+      doc.text("¡Excelente trabajo!", 14, finalY);
+      doc.setTextColor(50, 50, 50);
+      doc.setFontSize(10);
+      doc.text(`Felicidades por tu dedicación y esfuerzo. Has entregado todas tus actividades en`, 14, finalY + 6);
+      doc.text(`este periodo. Sigue así y alcanzarás todas tus metas.`, 14, finalY + 11);
+    }
+
+    doc.save(`Kardex_${alumnoSeleccionado.fullName}.pdf`);
+  };
+
   if (cargando) return <div className="loader" style={{ marginTop: '4rem' }}></div>;
 
   return (
@@ -256,6 +353,8 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
                 <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Selecciona un alumno para generar su Kardex.</div>
               ) : (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
+                  
+                  {/* DISEÑO DE DESCARGA COMPACTO */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '1.5rem', borderRadius: '16px' }}>
                     <div>
                       <h4 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>{alumnoSeleccionado.fullName}</h4>
@@ -263,7 +362,11 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
                     </div>
                     
                     <TutorialTooltip mensaje="Genera un reporte motivacional listo para imprimir o enviar a los tutores.">
-                      <button onClick={exportarKardexWord} className="pill-btn" style={{ backgroundColor: 'var(--accent-blue)', color: 'white' }}>📄 Exportar Kardex a Word</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Descargar Kardex:</span>
+                        <button onClick={exportarKardexWord} className="pill-btn" style={{ backgroundColor: '#185ABD', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '8px' }} title="Descargar en Word">📄 .doc</button>
+                        <button onClick={exportarKardexPDF} className="pill-btn" style={{ backgroundColor: '#E53935', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '8px' }} title="Descargar en PDF">📕 .pdf</button>
+                      </div>
                     </TutorialTooltip>
                   </div>
 
