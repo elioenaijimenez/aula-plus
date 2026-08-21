@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 
-interface Grupo { id: string; name: string; grade: string; subject: string; emphasis: string; }
+interface Grupo { id: string; name: string; grade: string; subject: string; emphasis: string; docenteEmail?: string; }
 interface MemoriaEscolar { escuela: string; ubicacion: string; docente: string; revisor: string; }
 
 export default function PlaneadorDidactico() {
@@ -11,25 +11,21 @@ export default function PlaneadorDidactico() {
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
 
-  // 1. Estados de Memoria Escolar
   const [memoria, setMemoria] = useState<MemoriaEscolar>({ escuela: '', ubicacion: '', docente: '', revisor: '' });
   const [modoEdicionMemoria, setModoEdicionMemoria] = useState(true);
   const [guardandoMemoria, setGuardandoMemoria] = useState(false);
 
-  // 2. Estados de Configuración (Fechas y Días)
   const [fechaEntrega, setFechaEntrega] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [diasClase, setDiasClase] = useState<string[]>([]);
   const [duracion, setDuracion] = useState('50');
   
-  // 3. Estados Pedagógicos
   const [instrucciones, setInstrucciones] = useState('');
   const [contenido, setContenido] = useState('');
   const [pda, setPda] = useState('');
   const [ejes, setEjes] = useState('');
 
-  // 4. Estados de Generación
   const [generando, setGenerando] = useState(false);
   const [resultadoIA, setResultadoIA] = useState('');
 
@@ -38,10 +34,11 @@ export default function PlaneadorDidactico() {
       const sessionLocal = localStorage.getItem('aulaPlusSession');
       const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
       
-      const userEmail = sessionData?.user?.email || 'docente_default';
+      const userEmail = sessionData?.user?.email || sessionData?.email || 'docente_default';
       setUserId(userEmail);
 
-      const qGrupos = query(collection(db, 'groups'));
+      // Consulta aislada: Solo grupos de este maestro
+      const qGrupos = query(collection(db, 'groups'), where('docenteEmail', '==', userEmail));
       const snapGrupos = await getDocs(qGrupos);
       const listaGrupos: Grupo[] = [];
       snapGrupos.forEach(d => {
