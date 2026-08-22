@@ -27,7 +27,6 @@ const CATEGORIAS_GLOBALES = [
 const CATEGORIAS_FILTRO = ['Todas', '⭐ Favoritos', 'Mi Drive (Privado)', ...CATEGORIAS_GLOBALES];
 
 const GRADOS = ['1° Secundaria', '2° Secundaria', '3° Secundaria'];
-// CORRECCIÓN: Solo los 4 campos formativos oficiales
 const CAMPOS_FORMATIVOS = [
   'Lenguajes', 
   'Saberes y Pensamiento Científico', 
@@ -41,7 +40,6 @@ const obtenerEstiloCategoria = (categoria: string) => {
     case 'Curricular': return { icon: '📖', color: '#9C27B0', bg: 'rgba(156, 39, 176, 0.1)' }; 
     case 'Rincón de Lectura': return { icon: '☕', color: '#FF9800', bg: 'rgba(255, 152, 0, 0.1)' }; 
     case 'Formatos para ti': return { icon: '📝', color: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)' }; 
-    // CORRECCIÓN: Cambio de emoji a uno universal para evitar desfases
     case 'Normativo Nacional': return { icon: '⚖️', color: '#1C51FF', bg: 'rgba(28, 81, 255, 0.1)' }; 
     case 'Normativo Estatal': return { icon: '📍', color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)' }; 
     case 'Mi Drive (Privado)': return { icon: '📂', color: '#185ABD', bg: 'rgba(24, 90, 189, 0.1)' }; 
@@ -66,7 +64,7 @@ const TextoExpandible = ({ texto }: { texto: string }) => {
   );
 };
 
-// CORRECCIÓN: Componente Estrella unificado para evitar cambios de tamaño
+// CORRECCIÓN: Botón Estrella SVG (No cambia de tamaño, mantiene borde amarillo)
 const BotonEstrella = ({ esFavorito, onToggle }: { esFavorito: boolean, onToggle: (e: React.MouseEvent) => void }) => {
   return (
     <button 
@@ -83,16 +81,15 @@ const BotonEstrella = ({ esFavorito, onToggle }: { esFavorito: boolean, onToggle
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        transition: 'all 0.2s ease',
-        transform: esFavorito ? 'scale(1.1)' : 'scale(1)'
+        transition: 'all 0.2s ease'
       }}
       title={esFavorito ? "Quitar de favoritos" : "Añadir a favoritos"}
     >
       <svg 
         xmlns="http://www.w3.org/2000/svg" 
         viewBox="0 0 24 24" 
-        width="24" 
-        height="24"
+        width="22" 
+        height="22"
         fill={esFavorito ? "#FFC107" : "none"} 
         stroke="#FFC107" 
         strokeWidth="2" 
@@ -415,11 +412,10 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
                   onClick={() => abrirDocumentoExterno(r.url)}
                   style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-input)', margin: 0, cursor: 'pointer', position: 'relative' }}
                 >
-                  {/* CORRECCIÓN: Botón Estrella rediseñado */}
                   <BotonEstrella esFavorito={esFavorito} onToggle={(e) => toggleFavorito(r.id, e)} />
 
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1, paddingRight: '25px' }}>
-                    {/* CORRECCIÓN: Contenedor de ícono con ancho estricto */}
+                    {/* CORRECCIÓN: minWidth fijo para evitar desfase */}
                     <div style={{ backgroundColor: estilo.bg, color: estilo.color, minWidth: '48px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>
                       {estilo.icon}
                     </div>
