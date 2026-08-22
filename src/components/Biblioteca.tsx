@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 
@@ -9,30 +9,36 @@ interface Recurso {
   descripcion: string; 
   url: string; 
   categoria: string; 
+  grado?: string;
+  campoFormativo?: string;
   docenteEmail?: string; 
   isGlobal?: boolean;
 }
 
 const CATEGORIAS_GLOBALES = [
-  'Normativo Nacional', 
-  'Normativo Estatal', 
+  'LTG',
   'Curricular', 
   'Rincón de Lectura', 
-  'Formatos para ti'
+  'Formatos para ti',
+  'Normativo Nacional', 
+  'Normativo Estatal'
 ];
 
-const CATEGORIAS_FILTRO = ['Todas', ...CATEGORIAS_GLOBALES, 'Mi Drive (Privado)'];
+const CATEGORIAS_FILTRO = ['Todas', '⭐ Favoritos', 'Mi Drive (Privado)', ...CATEGORIAS_GLOBALES];
 
-// Generador de estilos visuales según la categoría
+const GRADOS = ['1° Secundaria', '2° Secundaria', '3° Secundaria'];
+const CAMPOS_FORMATIVOS = ['Lenguajes', 'Saberes y Pensamiento Científico', 'Ética, Naturaleza y Sociedades', 'De lo Humano y lo Comunitario', 'Múltiples Lenguajes'];
+
 const obtenerEstiloCategoria = (categoria: string) => {
   switch (categoria) {
-    case 'Normativo Nacional': return { icon: '🇲🇽', color: '#1C51FF', bg: 'rgba(28, 81, 255, 0.1)' }; // Azul
-    case 'Normativo Estatal': return { icon: '📍', color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)' }; // Verde
-    case 'Curricular': return { icon: '📖', color: '#9C27B0', bg: 'rgba(156, 39, 176, 0.1)' }; // Morado
-    case 'Rincón de Lectura': return { icon: '☕', color: '#FF9800', bg: 'rgba(255, 152, 0, 0.1)' }; // Naranja
-    case 'Formatos para ti': return { icon: '📝', color: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)' }; // Rosa
-    case 'Mi Drive (Privado)': return { icon: '📂', color: '#185ABD', bg: 'rgba(24, 90, 189, 0.1)' }; // Azul Oscuro
-    default: return { icon: '📄', color: '#757575', bg: 'rgba(117, 117, 117, 0.1)' }; // Gris
+    case 'LTG': return { icon: '📚', color: '#4CAF50', bg: 'rgba(76, 175, 80, 0.1)' }; 
+    case 'Normativo Nacional': return { icon: '🇲🇽', color: '#1C51FF', bg: 'rgba(28, 81, 255, 0.1)' }; 
+    case 'Normativo Estatal': return { icon: '📍', color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)' }; 
+    case 'Curricular': return { icon: '📖', color: '#9C27B0', bg: 'rgba(156, 39, 176, 0.1)' }; 
+    case 'Rincón de Lectura': return { icon: '☕', color: '#FF9800', bg: 'rgba(255, 152, 0, 0.1)' }; 
+    case 'Formatos para ti': return { icon: '📝', color: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)' }; 
+    case 'Mi Drive (Privado)': return { icon: '📂', color: '#185ABD', bg: 'rgba(24, 90, 189, 0.1)' }; 
+    default: return { icon: '📄', color: '#757575', bg: 'rgba(117, 117, 117, 0.1)' }; 
   }
 };
 
@@ -58,11 +64,16 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
   const [misRecursos, setMisRecursos] = useState<Recurso[]>([]);
   const [cargando, setCargando] = useState(true);
   
-  // Filtros y Búsqueda estilo App
+  // Favoritos persistentes en la nube
+  const [favoritosIds, setFavoritosIds] = useState<string[]>([]);
+  
   const [filtroCat, setFiltroCat] = useState('Todas');
   const [busqueda, setBusqueda] = useState('');
   
-  // Estados para Mi Drive
+  // Filtros adicionales para LTG
+  const [filtroGrado, setFiltroGrado] = useState('Todos');
+  const [filtroCampo, setFiltroCampo] = useState('Todos');
+  
   const [userEmail, setUserEmail] = useState('');
   const [recursoEditando, setRecursoEditando] = useState<Recurso | null>(null);
   const [creandoNuevo, setCreandoNuevo] = useState(false);
@@ -72,7 +83,6 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
   const [nuevaDescripcion, setNuevaDescripcion] = useState('');
   const [nuevaUrl, setNuevaUrl] = useState('');
 
-  // Carga inicial unificada
   useEffect(() => {
     const fetchData = async () => {
       setCargando(true);
@@ -82,7 +92,15 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
         const email = sessionData?.user?.email || sessionData?.email || '';
         setUserEmail(email);
 
-        // 1. Cargar Catálogo Global (del SuperAdmin)
+        if (email) {
+          try {
+            const favDoc = await getDoc(doc(db, 'teacher_favorites', email));
+            if (favDoc.exists()) {
+              setFavoritosIds(favDoc.data().ids || []);
+            }
+          } catch (e) { console.error("Error al cargar favoritos de la nube", e); }
+        }
+
         const qGlobal = query(collection(db, 'global_library'), orderBy('createdAt', 'desc'));
         const snapGlobal = await getDocs(qGlobal);
         const listaGlobal: Recurso[] = [];
@@ -91,7 +109,6 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
         });
         setRecursosGlobales(listaGlobal);
 
-        // 2. Cargar Mi Drive (del Docente)
         if (email) {
           const qDrive = query(collection(db, 'teacher_drive'), where('docenteEmail', '==', email));
           const snapDrive = await getDocs(qDrive);
@@ -99,7 +116,6 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
           snapDrive.forEach(d => {
             listaDrive.push({ id: d.id, ...d.data(), categoria: 'Mi Drive (Privado)', isGlobal: false } as Recurso);
           });
-          // Ordenamos localmente por si createdAt viene nulo al instante de crear
           listaDrive.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
           setMisRecursos(listaDrive);
         }
@@ -111,28 +127,58 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
     fetchData();
   }, []);
 
-  // Consolidar todos los recursos para el buscador global
+  const toggleFavorito = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); 
+    let nuevosFavs;
+    if (favoritosIds.includes(id)) {
+      nuevosFavs = favoritosIds.filter(favId => favId !== id);
+    } else {
+      nuevosFavs = [...favoritosIds, id];
+    }
+    setFavoritosIds(nuevosFavs);
+    
+    if (userEmail) {
+      try {
+        await setDoc(doc(db, 'teacher_favorites', userEmail), { ids: nuevosFavs }, { merge: true });
+      } catch (error) {
+        console.error("Error al guardar favoritos en la nube", error);
+      }
+    }
+  };
+
   const todosLosRecursos = [...recursosGlobales, ...misRecursos];
 
-  // Aplicar filtros: Título + Descripción
   const recursosFiltrados = todosLosRecursos.filter(r => {
     const termino = busqueda.toLowerCase();
     
-    // Búsqueda robusta en título y descripción
     const coincideTitulo = r.titulo ? r.titulo.toLowerCase().includes(termino) : false;
     const coincideDesc = r.descripcion ? r.descripcion.toLowerCase().includes(termino) : false;
     const coincideBusqueda = coincideTitulo || coincideDesc;
     
-    const coincideCategoria = filtroCat === 'Todas' || r.categoria === filtroCat;
+    let coincideCategoria = false;
+    if (filtroCat === 'Todas') {
+      coincideCategoria = true;
+    } else if (filtroCat === '⭐ Favoritos') {
+      coincideCategoria = favoritosIds.includes(r.id);
+    } else {
+      coincideCategoria = r.categoria === filtroCat;
+    }
+
+    // Filtros extra para LTG
+    let coincideGrado = true;
+    let coincideCampo = true;
+    if (filtroCat === 'LTG' && r.categoria === 'LTG') {
+      if (filtroGrado !== 'Todos') coincideGrado = r.grado === filtroGrado;
+      if (filtroCampo !== 'Todos') coincideCampo = r.campoFormativo === filtroCampo;
+    }
     
-    return coincideBusqueda && coincideCategoria;
+    return coincideBusqueda && coincideCategoria && coincideGrado && coincideCampo;
   });
 
-  // Acciones de Mi Drive
   const abrirFormularioNuevo = () => {
     setNuevoTitulo(''); setNuevaDescripcion(''); setNuevaUrl('');
     setCreandoNuevo(true);
-    setFiltroCat('Mi Drive (Privado)'); // Forzamos a ver la sección privada para no confundirse
+    setFiltroCat('Mi Drive (Privado)'); 
   };
 
   const guardarNuevoRecurso = async (e: React.FormEvent) => {
@@ -202,7 +248,6 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
       
-      {/* CABECERA */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
         <div>
           <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', marginBottom: '1rem', padding: '0.3rem 0.8rem' }}>
@@ -219,7 +264,6 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
         </TutorialTooltip>
       </div>
 
-      {/* FORMULARIOS DE MI DRIVE (Solo visibles si se activan) */}
       {(creandoNuevo || recursoEditando) && (
         <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', marginBottom: '2rem', animation: 'fadeIn 0.2s' }}>
           
@@ -250,10 +294,8 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
         </div>
       )}
 
-      {/* BUSCADOR Y FILTROS ESTILO APP */}
       <div style={{ backgroundColor: 'var(--bg-app)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2rem' }}>
         
-        {/* Buscador de texto con Lógica UX Inteligente */}
         <input 
           type="text" 
           placeholder="🔍 Buscar por título o descripción del documento..." 
@@ -262,24 +304,22 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
           value={busqueda} 
           onChange={e => {
             setBusqueda(e.target.value);
-            // Magia UX: Si el usuario escribe algo, quitamos el filtro de categoría para asegurar que encuentre el archivo en toda la biblioteca
-            if (e.target.value.length > 0 && filtroCat !== 'Todas') {
+            if (e.target.value.length > 0 && filtroCat !== 'Todas' && filtroCat !== '⭐ Favoritos') {
               setFiltroCat('Todas');
             }
           }} 
         />
 
-        {/* Botones de Categorías desplazables (Scroll horizontal suave en móviles) */}
         <div style={{ display: 'flex', gap: '0.8rem', overflowX: 'auto', paddingBottom: '0.5rem', scrollbarWidth: 'none' }}>
           {CATEGORIAS_FILTRO.map(cat => (
             <button 
               key={cat}
-              onClick={() => setFiltroCat(cat)}
+              onClick={() => { setFiltroCat(cat); setFiltroGrado('Todos'); setFiltroCampo('Todos'); }}
               className="pill-btn"
               style={{ 
                 flexShrink: 0, 
-                backgroundColor: filtroCat === cat ? (cat === 'Mi Drive (Privado)' ? '#185ABD' : 'var(--text-main)') : 'transparent', 
-                color: filtroCat === cat ? 'var(--bg-app)' : 'var(--text-muted)', 
+                backgroundColor: filtroCat === cat ? (cat === 'Mi Drive (Privado)' ? '#185ABD' : cat === '⭐ Favoritos' ? '#FFC107' : 'var(--text-main)') : 'transparent', 
+                color: filtroCat === cat ? (cat === '⭐ Favoritos' ? '#000' : 'var(--bg-app)') : 'var(--text-muted)', 
                 border: `1px solid ${filtroCat === cat ? 'transparent' : 'var(--border-color)'}`,
                 fontWeight: filtroCat === cat ? 'bold' : 'normal'
               }}
@@ -288,15 +328,34 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
             </button>
           ))}
         </div>
+
+        {/* Filtros extra específicos para LTG */}
+        {filtroCat === 'LTG' && (
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', padding: '1rem', backgroundColor: 'rgba(76, 175, 80, 0.05)', borderRadius: '12px', border: '1px solid rgba(76, 175, 80, 0.2)', animation: 'fadeIn 0.3s' }}>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Filtrar por Grado</label>
+              <select className="search-input" value={filtroGrado} onChange={e => setFiltroGrado(e.target.value)} style={{ width: '100%', padding: '0.5rem' }}>
+                <option value="Todos">Todos los Grados</option>
+                {GRADOS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Filtrar por Campo Formativo</label>
+              <select className="search-input" value={filtroCampo} onChange={e => setFiltroCampo(e.target.value)} style={{ width: '100%', padding: '0.5rem' }}>
+                <option value="Todos">Todos los Campos</option>
+                {CAMPOS_FORMATIVOS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* REJILLA DE RECURSOS */}
       {cargando ? <div className="loader"></div> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
           
           {recursosFiltrados.length === 0 ? (
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem 1rem', color: 'var(--text-muted)', backgroundColor: 'var(--bg-panel)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
-              <p style={{ margin: '0 0 1rem 0', fontSize: '1.1rem' }}>No se encontraron recursos que coincidan con tu búsqueda.</p>
+              <p style={{ margin: '0 0 1rem 0', fontSize: '1.1rem' }}>No se encontraron recursos que coincidan.</p>
               {filtroCat !== 'Todas' && (
                 <button onClick={() => setFiltroCat('Todas')} className="pill-btn" style={{ backgroundColor: 'var(--accent-blue)', color: 'white' }}>
                   Buscar en Todas las Categorías
@@ -306,6 +365,7 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
           ) : (
             recursosFiltrados.map(r => {
               const estilo = obtenerEstiloCategoria(r.categoria);
+              const esFavorito = favoritosIds.includes(r.id);
               return (
                 <div 
                   key={r.id} 
@@ -313,7 +373,15 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
                   onClick={() => abrirDocumentoExterno(r.url)}
                   style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-input)', margin: 0, cursor: 'pointer', position: 'relative' }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1 }}>
+                  <button 
+                    onClick={(e) => toggleFavorito(r.id, e)}
+                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', opacity: esFavorito ? 1 : 0.3, zIndex: 10, transition: 'opacity 0.2s' }}
+                    title={esFavorito ? "Quitar de favoritos" : "Añadir a favoritos"}
+                  >
+                    {esFavorito ? '⭐' : '☆'}
+                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1, paddingRight: '25px' }}>
                     <div style={{ backgroundColor: estilo.bg, color: estilo.color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>
                       {estilo.icon}
                     </div>
@@ -322,11 +390,17 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
                         {r.categoria}
                       </span>
                       <h4 style={{ margin: '0.2rem 0 0.4rem 0', color: 'var(--text-main)', fontSize: '1.1rem', lineHeight: '1.3' }}>{r.titulo}</h4>
+                      
+                      {r.categoria === 'LTG' && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                          <b>{r.grado}</b> • {r.campoFormativo}
+                        </div>
+                      )}
+
                       <TextoExpandible texto={r.descripcion} />
                     </div>
                   </div>
                   
-                  {/* SI ES UN RECURSO PRIVADO, MOSTRAMOS LOS BOTONES DE EDICIÓN */}
                   {!r.isGlobal && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
                       <button 

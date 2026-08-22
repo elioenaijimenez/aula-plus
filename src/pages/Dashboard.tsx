@@ -101,10 +101,10 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   
   const modulos = [
     { id: 'mis-grupos', titulo: 'Mis Grupos', subtitulo: 'Ver y gestionar listas de alumnos', color: 'var(--accent-blue)', inicial: 'G' },
-    { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Asistencia, Calificaciones y Conducta', color: 'var(--accent-green)', inicial: 'R' },
-    { id: 'biblioteca', titulo: 'Biblioteca Docente', subtitulo: 'Normativos, Mis Recursos y Lectura', color: 'var(--accent-purple)', inicial: 'B' },
-    { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Ruleta, cronómetro y herramientas globales', color: 'var(--accent-red)', inicial: 'U' },
-    { id: 'modulo-ia', titulo: 'Pregúntale a la IA', subtitulo: 'Asistente pedagógico y generador de actividades', color: 'var(--accent-yellow)', inicial: 'IA' }
+    { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Reportes que comunican mejor', color: 'var(--accent-green)', inicial: 'R' },
+    { id: 'biblioteca', titulo: 'Biblioteca Docente', subtitulo: 'Entra y sorprendete con el contenido', color: 'var(--accent-purple)', inicial: 'B' },
+    { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Haz de tu clase una experiencia', color: 'var(--accent-red)', inicial: 'U' },
+    { id: 'modulo-ia', titulo: 'Ahorra tiempo, pregúntale a la IA', subtitulo: 'Asistente pedagógico y generador de actividades', color: 'var(--accent-yellow)', inicial: 'IA' }
   ];
 
   const limpiarPaneles = () => {
