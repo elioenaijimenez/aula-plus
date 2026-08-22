@@ -23,7 +23,6 @@ const CATEGORIAS = [
 ];
 
 const GRADOS = ['1° Secundaria', '2° Secundaria', '3° Secundaria'];
-// CORRECCIÓN: Solo los 4 campos formativos oficiales
 const CAMPOS_FORMATIVOS = [
   'Lenguajes', 
   'Saberes y Pensamiento Científico', 
@@ -31,18 +30,35 @@ const CAMPOS_FORMATIVOS = [
   'De lo Humano y lo Comunitario'
 ];
 
-// Generador automático de iconos y colores según la categoría
 const obtenerEstiloCategoria = (categoria: string) => {
   switch (categoria) {
     case 'LTG': return { icon: '📚', color: '#4CAF50', bg: 'rgba(76, 175, 80, 0.1)' }; 
     case 'Curricular': return { icon: '📖', color: '#9C27B0', bg: 'rgba(156, 39, 176, 0.1)' }; 
     case 'Rincón de Lectura': return { icon: '☕', color: '#FF9800', bg: 'rgba(255, 152, 0, 0.1)' }; 
     case 'Formatos para ti': return { icon: '📝', color: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)' }; 
-    // CORRECCIÓN: Ícono seguro que no rompe el diseño flexbox
     case 'Normativo Nacional': return { icon: '⚖️', color: '#1C51FF', bg: 'rgba(28, 81, 255, 0.1)' }; 
     case 'Normativo Estatal': return { icon: '📍', color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)' }; 
     default: return { icon: '📄', color: '#757575', bg: 'rgba(117, 117, 117, 0.1)' }; 
   }
+};
+
+// CORRECCIÓN: Agregamos el componente de Texto Expandible que faltaba en la vista global
+const TextoExpandible = ({ texto }: { texto: string }) => {
+  const [expandido, setExpandido] = useState(false);
+  if (!texto) return null;
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ marginTop: '0.5rem', cursor: 'default' }}>
+      <p style={{ display: '-webkit-box', WebkitLineClamp: expandido ? 'unset' : 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+        {texto}
+      </p>
+      {/* Ajustamos el límite a 60 letras para que siempre alcance a mostrar el botón si es necesario */}
+      {texto.length > 60 && (
+        <button onClick={(e) => { e.stopPropagation(); setExpandido(!expandido); }} style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', fontSize: '0.85rem', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}>
+          {expandido ? 'Leer menos' : 'Leer más...'}
+        </button>
+      )}
+    </div>
+  );
 };
 
 export default function GestorBibliotecaGlobal() {
@@ -290,9 +306,8 @@ export default function GestorBibliotecaGlobal() {
                             <b>{b.grado}</b> • {b.campoFormativo}
                           </div>
                         )}
-                        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {b.descripcion || 'Sin descripción adicional.'}
-                        </p>
+                        {/* CORRECCIÓN: Implementado TextoExpandible aquí */}
+                        <TextoExpandible texto={b.descripcion || 'Sin descripción adicional.'} />
                       </div>
                     </div>
                     

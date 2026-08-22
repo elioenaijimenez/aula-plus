@@ -34,6 +34,7 @@ const CAMPOS_FORMATIVOS = [
   'De lo Humano y lo Comunitario'
 ];
 
+// Generador de estilos visuales según la categoría
 const obtenerEstiloCategoria = (categoria: string) => {
   switch (categoria) {
     case 'LTG': return { icon: '📚', color: '#4CAF50', bg: 'rgba(76, 175, 80, 0.1)' }; 
@@ -47,6 +48,14 @@ const obtenerEstiloCategoria = (categoria: string) => {
   }
 };
 
+// Generador de color dinámico para los grados de LTG
+const obtenerColorGrado = (grado?: string) => {
+  if (grado === '1° Secundaria') return '#4CAF50'; // Verde
+  if (grado === '2° Secundaria') return '#1C51FF'; // Azul
+  if (grado === '3° Secundaria') return '#FF4D4F'; // Rojo
+  return '#757575';
+};
+
 const TextoExpandible = ({ texto }: { texto: string }) => {
   const [expandido, setExpandido] = useState(false);
   if (!texto) return null;
@@ -55,7 +64,7 @@ const TextoExpandible = ({ texto }: { texto: string }) => {
       <p style={{ display: '-webkit-box', WebkitLineClamp: expandido ? 'unset' : 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
         {texto}
       </p>
-      {texto.length > 100 && (
+      {texto.length > 60 && (
         <button onClick={(e) => { e.stopPropagation(); setExpandido(!expandido); }} style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', fontSize: '0.85rem', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}>
           {expandido ? 'Leer menos' : 'Leer más...'}
         </button>
@@ -64,7 +73,6 @@ const TextoExpandible = ({ texto }: { texto: string }) => {
   );
 };
 
-// CORRECCIÓN: Botón Estrella SVG (No cambia de tamaño, mantiene borde amarillo)
 const BotonEstrella = ({ esFavorito, onToggle }: { esFavorito: boolean, onToggle: (e: React.MouseEvent) => void }) => {
   return (
     <button 
@@ -288,6 +296,19 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
       
+      {/* MAGIA CSS: Inyectamos estilos para el hover glow dinámico */}
+      <style>{`
+        .biblioteca-card {
+          transition: all 0.3s ease;
+          border: 1px solid var(--border-color);
+        }
+        .biblioteca-card:hover {
+          box-shadow: 0 4px 20px var(--glow-color-shadow);
+          border-color: var(--glow-color-border);
+          transform: translateY(-3px);
+        }
+      `}</style>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
         <div>
           <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', marginBottom: '1rem', padding: '0.3rem 0.8rem' }}>
@@ -351,22 +372,33 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
         />
 
         <div style={{ display: 'flex', gap: '0.8rem', overflowX: 'auto', paddingBottom: '0.5rem', scrollbarWidth: 'none' }}>
-          {CATEGORIAS_FILTRO.map(cat => (
-            <button 
-              key={cat}
-              onClick={() => { setFiltroCat(cat); setFiltroGrado('Todos'); setFiltroCampo('Todos'); }}
-              className="pill-btn"
-              style={{ 
-                flexShrink: 0, 
-                backgroundColor: filtroCat === cat ? (cat === 'Mi Drive (Privado)' ? '#185ABD' : cat === '⭐ Favoritos' ? '#FFC107' : 'var(--text-main)') : 'transparent', 
-                color: filtroCat === cat ? (cat === '⭐ Favoritos' ? '#000' : 'var(--bg-app)') : 'var(--text-muted)', 
-                border: `1px solid ${filtroCat === cat ? 'transparent' : 'var(--border-color)'}`,
-                fontWeight: filtroCat === cat ? 'bold' : 'normal'
-              }}
-            >
-              {cat}
-            </button>
-          ))}
+          {CATEGORIAS_FILTRO.map(cat => {
+            // Asignación de colores dinámicos a los botones
+            let catColor = 'var(--text-muted)';
+            if (cat === 'Todas') catColor = '#888';
+            else if (cat === '⭐ Favoritos') catColor = '#FFC107';
+            else if (cat === 'Mi Drive (Privado)') catColor = '#185ABD';
+            else catColor = obtenerEstiloCategoria(cat).color;
+
+            const isSelected = filtroCat === cat;
+
+            return (
+              <button 
+                key={cat}
+                onClick={() => { setFiltroCat(cat); setFiltroGrado('Todos'); setFiltroCampo('Todos'); }}
+                className="pill-btn hover-opacity"
+                style={{ 
+                  flexShrink: 0, 
+                  backgroundColor: isSelected ? catColor : 'transparent', 
+                  color: isSelected ? (cat === '⭐ Favoritos' ? '#000' : '#fff') : catColor, 
+                  border: `1px solid ${isSelected ? 'transparent' : catColor}`,
+                  fontWeight: isSelected ? 'bold' : '600'
+                }}
+              >
+                {cat}
+              </button>
+            );
+          })}
         </div>
 
         {filtroCat === 'LTG' && (
@@ -405,17 +437,30 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
             recursosFiltrados.map(r => {
               const estilo = obtenerEstiloCategoria(r.categoria);
               const esFavorito = favoritosIds.includes(r.id);
+              
+              // Determinar el color del glow
+              const glowHex = r.categoria === 'LTG' ? obtenerColorGrado(r.grado) : estilo.color;
+
               return (
                 <div 
                   key={r.id} 
-                  className="activity-card hover-opacity" 
+                  className="activity-card biblioteca-card" 
                   onClick={() => abrirDocumentoExterno(r.url)}
-                  style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-input)', margin: 0, cursor: 'pointer', position: 'relative' }}
+                  style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    backgroundColor: 'var(--bg-input)', 
+                    margin: 0, 
+                    cursor: 'pointer', 
+                    position: 'relative',
+                    // Variables inyectadas para el CSS hover mágico
+                    '--glow-color-shadow': `${glowHex}66`, // 40% de opacidad
+                    '--glow-color-border': glowHex
+                  } as React.CSSProperties}
                 >
                   <BotonEstrella esFavorito={esFavorito} onToggle={(e) => toggleFavorito(r.id, e)} />
 
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1, paddingRight: '25px' }}>
-                    {/* CORRECCIÓN: minWidth fijo para evitar desfase */}
                     <div style={{ backgroundColor: estilo.bg, color: estilo.color, minWidth: '48px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>
                       {estilo.icon}
                     </div>
@@ -426,8 +471,8 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
                       <h4 style={{ margin: '0.2rem 0 0.4rem 0', color: 'var(--text-main)', fontSize: '1.1rem', lineHeight: '1.3' }}>{r.titulo}</h4>
                       
                       {r.categoria === 'LTG' && (
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
-                          <b>{r.grado}</b> • {r.campoFormativo}
+                        <div style={{ fontSize: '0.8rem', color: glowHex, marginBottom: '0.4rem', fontWeight: '600' }}>
+                          {r.grado} • {r.campoFormativo}
                         </div>
                       )}
 
