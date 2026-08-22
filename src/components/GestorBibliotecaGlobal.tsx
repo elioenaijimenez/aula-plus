@@ -23,17 +23,24 @@ const CATEGORIAS = [
 ];
 
 const GRADOS = ['1° Secundaria', '2° Secundaria', '3° Secundaria'];
-const CAMPOS_FORMATIVOS = ['Lenguajes', 'Saberes y Pensamiento Científico', 'Ética, Naturaleza y Sociedades', 'De lo Humano y lo Comunitario', 'Múltiples Lenguajes'];
+// CORRECCIÓN: Solo los 4 campos formativos oficiales
+const CAMPOS_FORMATIVOS = [
+  'Lenguajes', 
+  'Saberes y Pensamiento Científico', 
+  'Ética, Naturaleza y Sociedades', 
+  'De lo Humano y lo Comunitario'
+];
 
 const obtenerEstiloCategoria = (categoria: string) => {
   switch (categoria) {
-    case 'LTG': return { icon: '📚', color: '#4CAF50', bg: 'rgba(76, 175, 80, 0.1)' }; // Verde Claro
-    case 'Curricular': return { icon: '📖', color: '#9C27B0', bg: 'rgba(156, 39, 176, 0.1)' }; // Morado
-    case 'Rincón de Lectura': return { icon: '☕', color: '#FF9800', bg: 'rgba(255, 152, 0, 0.1)' }; // Naranja
-    case 'Formatos para ti': return { icon: '📝', color: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)' }; // Rosa
-    case 'Normativo Nacional': return { icon: '🇲🇽', color: '#1C51FF', bg: 'rgba(28, 81, 255, 0.1)' }; // Azul
-    case 'Normativo Estatal': return { icon: '📍', color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)' }; // Verde
-    default: return { icon: '📄', color: '#757575', bg: 'rgba(117, 117, 117, 0.1)' }; // Gris
+    case 'LTG': return { icon: '📚', color: '#4CAF50', bg: 'rgba(76, 175, 80, 0.1)' }; 
+    case 'Curricular': return { icon: '📖', color: '#9C27B0', bg: 'rgba(156, 39, 176, 0.1)' }; 
+    case 'Rincón de Lectura': return { icon: '☕', color: '#FF9800', bg: 'rgba(255, 152, 0, 0.1)' }; 
+    case 'Formatos para ti': return { icon: '📝', color: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)' }; 
+    // CORRECCIÓN: Cambio de emoji a uno universal para evitar desfases
+    case 'Normativo Nacional': return { icon: '⚖️', color: '#1C51FF', bg: 'rgba(28, 81, 255, 0.1)' }; 
+    case 'Normativo Estatal': return { icon: '📍', color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)' }; 
+    default: return { icon: '📄', color: '#757575', bg: 'rgba(117, 117, 117, 0.1)' }; 
   }
 };
 
@@ -271,7 +278,8 @@ export default function GestorBibliotecaGlobal() {
                     style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-input)', margin: 0, cursor: 'pointer', position: 'relative' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1 }}>
-                      <div style={{ backgroundColor: estilo.bg, color: estilo.color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>
+                      {/* CORRECCIÓN: Contenedor con ancho fijo para evitar desfases */}
+                      <div style={{ backgroundColor: estilo.bg, color: estilo.color, minWidth: '48px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>
                         {estilo.icon}
                       </div>
                       <div style={{ overflow: 'hidden' }}>

@@ -27,16 +27,23 @@ const CATEGORIAS_GLOBALES = [
 const CATEGORIAS_FILTRO = ['Todas', '⭐ Favoritos', 'Mi Drive (Privado)', ...CATEGORIAS_GLOBALES];
 
 const GRADOS = ['1° Secundaria', '2° Secundaria', '3° Secundaria'];
-const CAMPOS_FORMATIVOS = ['Lenguajes', 'Saberes y Pensamiento Científico', 'Ética, Naturaleza y Sociedades', 'De lo Humano y lo Comunitario', 'Múltiples Lenguajes'];
+// CORRECCIÓN: Solo los 4 campos formativos oficiales
+const CAMPOS_FORMATIVOS = [
+  'Lenguajes', 
+  'Saberes y Pensamiento Científico', 
+  'Ética, Naturaleza y Sociedades', 
+  'De lo Humano y lo Comunitario'
+];
 
 const obtenerEstiloCategoria = (categoria: string) => {
   switch (categoria) {
     case 'LTG': return { icon: '📚', color: '#4CAF50', bg: 'rgba(76, 175, 80, 0.1)' }; 
-    case 'Normativo Nacional': return { icon: '🇲🇽', color: '#1C51FF', bg: 'rgba(28, 81, 255, 0.1)' }; 
-    case 'Normativo Estatal': return { icon: '📍', color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)' }; 
     case 'Curricular': return { icon: '📖', color: '#9C27B0', bg: 'rgba(156, 39, 176, 0.1)' }; 
     case 'Rincón de Lectura': return { icon: '☕', color: '#FF9800', bg: 'rgba(255, 152, 0, 0.1)' }; 
     case 'Formatos para ti': return { icon: '📝', color: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)' }; 
+    // CORRECCIÓN: Cambio de emoji a uno universal para evitar desfases
+    case 'Normativo Nacional': return { icon: '⚖️', color: '#1C51FF', bg: 'rgba(28, 81, 255, 0.1)' }; 
+    case 'Normativo Estatal': return { icon: '📍', color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)' }; 
     case 'Mi Drive (Privado)': return { icon: '📂', color: '#185ABD', bg: 'rgba(24, 90, 189, 0.1)' }; 
     default: return { icon: '📄', color: '#757575', bg: 'rgba(117, 117, 117, 0.1)' }; 
   }
@@ -59,18 +66,55 @@ const TextoExpandible = ({ texto }: { texto: string }) => {
   );
 };
 
+// CORRECCIÓN: Componente Estrella unificado para evitar cambios de tamaño
+const BotonEstrella = ({ esFavorito, onToggle }: { esFavorito: boolean, onToggle: (e: React.MouseEvent) => void }) => {
+  return (
+    <button 
+      onClick={onToggle}
+      style={{ 
+        position: 'absolute', 
+        top: '10px', 
+        right: '10px', 
+        background: 'none', 
+        border: 'none', 
+        cursor: 'pointer', 
+        zIndex: 10, 
+        padding: '0.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'all 0.2s ease',
+        transform: esFavorito ? 'scale(1.1)' : 'scale(1)'
+      }}
+      title={esFavorito ? "Quitar de favoritos" : "Añadir a favoritos"}
+    >
+      <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        viewBox="0 0 24 24" 
+        width="24" 
+        height="24"
+        fill={esFavorito ? "#FFC107" : "none"} 
+        stroke="#FFC107" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round"
+      >
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    </button>
+  );
+};
+
 export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
   const [recursosGlobales, setRecursosGlobales] = useState<Recurso[]>([]);
   const [misRecursos, setMisRecursos] = useState<Recurso[]>([]);
   const [cargando, setCargando] = useState(true);
   
-  // Favoritos persistentes en la nube
   const [favoritosIds, setFavoritosIds] = useState<string[]>([]);
   
   const [filtroCat, setFiltroCat] = useState('Todas');
   const [busqueda, setBusqueda] = useState('');
   
-  // Filtros adicionales para LTG
   const [filtroGrado, setFiltroGrado] = useState('Todos');
   const [filtroCampo, setFiltroCampo] = useState('Todos');
   
@@ -164,7 +208,6 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
       coincideCategoria = r.categoria === filtroCat;
     }
 
-    // Filtros extra para LTG
     let coincideGrado = true;
     let coincideCampo = true;
     if (filtroCat === 'LTG' && r.categoria === 'LTG') {
@@ -329,7 +372,6 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
           ))}
         </div>
 
-        {/* Filtros extra específicos para LTG */}
         {filtroCat === 'LTG' && (
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', padding: '1rem', backgroundColor: 'rgba(76, 175, 80, 0.05)', borderRadius: '12px', border: '1px solid rgba(76, 175, 80, 0.2)', animation: 'fadeIn 0.3s' }}>
             <div style={{ flex: 1, minWidth: '150px' }}>
@@ -373,16 +415,12 @@ export default function Biblioteca({ onVolver }: { onVolver: () => void }) {
                   onClick={() => abrirDocumentoExterno(r.url)}
                   style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-input)', margin: 0, cursor: 'pointer', position: 'relative' }}
                 >
-                  <button 
-                    onClick={(e) => toggleFavorito(r.id, e)}
-                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', opacity: esFavorito ? 1 : 0.3, zIndex: 10, transition: 'opacity 0.2s' }}
-                    title={esFavorito ? "Quitar de favoritos" : "Añadir a favoritos"}
-                  >
-                    {esFavorito ? '⭐' : '☆'}
-                  </button>
+                  {/* CORRECCIÓN: Botón Estrella rediseñado */}
+                  <BotonEstrella esFavorito={esFavorito} onToggle={(e) => toggleFavorito(r.id, e)} />
 
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1, paddingRight: '25px' }}>
-                    <div style={{ backgroundColor: estilo.bg, color: estilo.color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>
+                    {/* CORRECCIÓN: Contenedor de ícono con ancho estricto */}
+                    <div style={{ backgroundColor: estilo.bg, color: estilo.color, minWidth: '48px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>
                       {estilo.icon}
                     </div>
                     <div style={{ overflow: 'hidden' }}>
