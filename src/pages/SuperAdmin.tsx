@@ -20,9 +20,9 @@ export default function SuperAdmin({ onLogout, onSwitchView }: { onLogout: () =>
       </div>
 
       <div className="tabs-nav" style={{ marginBottom: '2rem', overflowX: 'auto', display: 'flex', flexWrap: 'nowrap', paddingBottom: '5px' }}>
+        <span className={`tab ${tabActiva === 'calendario' ? 'active' : ''}`} onClick={() => setTabActiva('calendario')} style={{ whiteSpace: 'nowrap' }}>📅 Calendario Oficial</span>
         <span className={`tab ${tabActiva === 'llaves' ? 'active' : ''}`} onClick={() => setTabActiva('llaves')} style={{ whiteSpace: 'nowrap' }}>🔑 Gestor de KeyPlus</span>
         <span className={`tab ${tabActiva === 'biblioteca' ? 'active' : ''}`} onClick={() => setTabActiva('biblioteca')} style={{ whiteSpace: 'nowrap' }}>📚 Gestión de Biblioteca Global</span>
-        <span className={`tab ${tabActiva === 'calendario' ? 'active' : ''}`} onClick={() => setTabActiva('calendario')} style={{ whiteSpace: 'nowrap' }}>📅 Calendario Oficial</span>
       </div>
 
       {tabActiva === 'llaves' && <GestorLlaves />}
