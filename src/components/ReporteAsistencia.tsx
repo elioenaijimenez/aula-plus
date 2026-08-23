@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, query, getDocs, orderBy, doc, updateDoc, getDoc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
@@ -48,7 +48,7 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // --- ESTADOS PARA EL MINI CALENDARIO Y GESTIÓN DE DÍAS ---
+  // Estados para el mini calendario y gestión de días
   const [mesCalGlobal, setMesCalGlobal] = useState(new Date());
   const [modalDiaActivo, setModalDiaActivo] = useState<string | null>(null);
   const [editandoAsistencia, setEditandoAsistencia] = useState(false);
@@ -159,7 +159,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
   };
 
   const generarDocumentoWord = async () => {
-    // ... Lógica de Word existente sin cambios ...
     if (!alumnoSeleccionado) return;
     if (mesesSeleccionados.length === 0) { alert("Selecciona al menos un mes para exportar."); return; }
 
@@ -301,7 +300,7 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
     setModalExportar(false);
   };
 
-  // --- LÓGICA DEL MINI CALENDARIO Y EDICIÓN ---
+  // Lógica del mini calendario y edición
   const diasRegistradosSet = new Set(diasRegistrados.map(d => d.fecha));
   
   const abrirDiaRegistrado = (fechaStr: string) => {
@@ -320,7 +319,7 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
       try {
         await deleteDoc(doc(db, `groups/${idGrupo}/attendance`, modalDiaActivo));
         setModalDiaActivo(null);
-        setRefreshTrigger(prev => prev + 1); // Recarga automática
+        setRefreshTrigger(prev => prev + 1);
       } catch (error) { alert("Error al borrar el registro."); }
       setProcesandoDia(false);
     }
@@ -335,7 +334,7 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
         updatedAt: serverTimestamp()
       });
       setEditandoAsistencia(false);
-      setRefreshTrigger(prev => prev + 1); // Recarga automática
+      setRefreshTrigger(prev => prev + 1);
     } catch (error) { alert("Error al actualizar la asistencia."); }
     setProcesandoDia(false);
   };
@@ -556,7 +555,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
                   </span>
                 </div>
                 
-                {/* AQUI SE RENDERIZA EL MINI CALENDARIO */}
                 <TutorialTooltip mensaje="Observa los días que pasaste lista. Da clic en uno verde para descargar, editar o borrar esa asistencia específica." posicion="top">
                   {renderMiniCalendario()}
                 </TutorialTooltip>
