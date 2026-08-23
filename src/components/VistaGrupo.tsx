@@ -28,7 +28,8 @@ export default function VistaGrupo({ idGrupo, nombreGrupo, tabInicial = 'alumnos
       </div>
 
       {tabActiva === 'alumnos' && <TabAlumnos idGrupo={idGrupo} nombreGrupo={nombreGrupo} onVarkChange={onVarkChange} />}
-      {tabActiva === 'asistencia' && <TabAsistencia idGrupo={idGrupo} grupo={{name: nombreGrupo}} onVolver={onVolver} />}
+      {/* CORRECCIÓN: Le quitamos las propiedades extra que causaban el error */}
+      {tabActiva === 'asistencia' && <TabAsistencia idGrupo={idGrupo} />}
       
     </div>
   );

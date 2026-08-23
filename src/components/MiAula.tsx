@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import CalificarEvidencia from './CalificarEvidencia';
-import TutorialTooltip from './TutorialTooltip';
+// CORRECCIÓN: Se eliminó el import de TutorialTooltip que causaba el error TS6133
 
 interface Evidencia { 
   id: string; 
@@ -31,7 +31,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
   const [evidenciaActiva, setEvidenciaActiva] = useState<Evidencia | null>(null);
   const [pizarraCode, setPizarraCode] = useState<string>('Generando...');
   
-  // Estados del Formulario
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -48,7 +47,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    // 1. Generar o recuperar la Clave de la Pizarra Alumno
     const inicializarPizarra = async () => {
       const refGrupo = doc(db, 'groups', idGrupo);
       const docSnap = await getDoc(refGrupo);
@@ -57,7 +55,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
         if (data.pizarraCode) {
           setPizarraCode(data.pizarraCode);
         } else {
-          // Genera una clave aleatoria corta (ej. AULA-Y6T9)
           const newCode = 'AULA-' + Math.random().toString(36).substring(2, 6).toUpperCase();
           await updateDoc(refGrupo, { pizarraCode: newCode });
           setPizarraCode(newCode);
@@ -66,7 +63,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
     };
     inicializarPizarra();
 
-    // 2. Cargar Actividades
     const q = query(collection(db, `groups/${idGrupo}/evidences`));
     const desuscribir = onSnapshot(q, (snapshot) => {
       const lista: Evidencia[] = [];
@@ -126,7 +122,7 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
       } else { 
         await addDoc(collection(db, `groups/${idGrupo}/evidences`), { 
           ...datosEvidencia, createdAt: serverTimestamp(), calificaciones: {},
-          vistas: 0, likes: 0 // Campos preparados para la Pizarra Alumno
+          vistas: 0, likes: 0
         }); 
       }
       setVista('panel');
@@ -237,7 +233,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
     <div style={{ animation: 'fadeIn 0.3s' }}>
       
       <style>{`
-        /* Toggle Switch CSS Minimalista */
         .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0;}
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 34px; }
@@ -299,7 +294,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
             
-            {/* Filtros en forma de Pill */}
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', backgroundColor: 'var(--bg-panel)', padding: '0.4rem', borderRadius: '50px', border: '1px solid var(--border-color)' }}>
               {['Todos', '1', '2', '3'].map(t => (
                 <button 

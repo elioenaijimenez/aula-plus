@@ -10,15 +10,13 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [calificaciones, setCalificaciones] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(true);
-  const [datosGrupo, setDatosGrupo] = useState<any>(null);
+  
+  // CORRECCIÓN: Se eliminó la variable datosGrupo que no se usaba
 
   useEffect(() => {
     const fetchData = async () => {
       setCargando(true);
       
-      const docGrupo = await getDoc(doc(db, 'groups', idGrupo));
-      if (docGrupo.exists()) setDatosGrupo(docGrupo.data());
-
       const q = query(collection(db, `groups/${idGrupo}/students`), orderBy('studentNumber', 'asc'));
       const snapAlumnos = await getDocs(q);
       const lista: Alumno[] = [];
@@ -36,7 +34,6 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
       let huboCambiosNuevos = false;
       const calificacionesIniciales: Record<string, number> = {};
 
-      // MAGIA UX: Asignamos por defecto la calificación mínima a todos si no han sido calificados
       lista.forEach(alumno => {
         if (datosCargados[alumno.id] === undefined) {
           calificacionesIniciales[alumno.id] = evidencia.puntajeMinimo;
@@ -64,7 +61,6 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
     });
   };
 
-  // Verificamos si podemos usar botones rápidos (rango corto) o necesitamos el input (rango largo como 0 a 100)
   const isRangoPequeno = (evidencia.puntajeMaximo - evidencia.puntajeMinimo) <= 15;
 
   const renderControlesCalificacion = (idAlumno: string, calActual: number) => {
@@ -83,7 +79,6 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
       }
       return <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>{botones}</div>;
     } else {
-      // Fallback por si en algún momento hacen una actividad de 0 a 100 pts
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <input 

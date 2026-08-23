@@ -8,6 +8,8 @@ import Biblioteca from '../components/Biblioteca';
 import Utilidades from '../components/Utilidades';
 import ModuloIA from '../components/ModuloIA';
 import CalendarioEscolar from '../components/CalendarioEscolar'; 
+// CORRECCIÓN: Agregamos el import de MiAula
+import MiAula from '../components/MiAula'; 
 import { useTutorial } from '../context/TutorialContext'; 
 import TutorialTooltip from '../components/TutorialTooltip';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -16,7 +18,6 @@ import { db } from '../services/firebase';
 interface VarkInfo { visible: boolean; v: number; a: number; r: number; k: number; }
 
 export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: () => void, onSwitchToAdmin?: () => void }) {
-  // AÑADIDO: 'mis-grupos-aula' y 'mi-aula' para la nueva sección
   const [vistaActual, setVistaActual] = useState<'inicio' | 'crear-grupo' | 'mis-grupos' | 'vista-grupo' | 'reportes' | 'utilidades' | 'biblioteca' | 'modulo-ia' | 'calendario' | 'mis-grupos-aula' | 'mi-aula'>('inicio');
   
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<{id: string, nombre: string, tab: 'alumnos' | 'asistencia'} | null>(null);
@@ -75,14 +76,12 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const manejarCierrePerfil = () => { setMostrarPerfil(false); setPerfilObligatorio(false); };
 
-  // Abre la libreta administrativa
   const abrirGrupo = (id: string, nombre: string) => {
     verificarVigenciaKeyPlus(userEmail); 
     setGrupoSeleccionado({ id, nombre, tab: 'alumnos' });
     setVistaActual('vista-grupo');
   };
 
-  // Abre el nuevo ecosistema de "Mi Aula"
   const abrirMiAula = (id: string, nombre: string) => {
     verificarVigenciaKeyPlus(userEmail); 
     setAulaSeleccionada({ id, nombre });
@@ -99,7 +98,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const maxVark = Math.max(varkInfo.v, varkInfo.a, varkInfo.r, varkInfo.k, 1);
   
   const modulos = [
-    { id: 'mis-grupos-aula', titulo: 'Mi Aula Virtual', subtitulo: 'Actividades, Pizarra y Biblioteca', color: 'var(--accent-purple)', inicial: 'A' }, // NUEVO MÓDULO ESTRELLA
+    { id: 'mis-grupos-aula', titulo: 'Mi Aula Virtual', subtitulo: 'Actividades, Pizarra y Biblioteca', color: 'var(--accent-purple)', inicial: 'A' },
     { id: 'mis-grupos', titulo: 'Libreta Administrativa', subtitulo: 'Ver listas, VARK y asistencia', color: 'var(--accent-blue)', inicial: 'L' },
     { id: 'calendario', titulo: 'Calendario Escolar', subtitulo: 'Planea el ciclo con tus post-its', color: '#FFC107', inicial: 'C' }, 
     { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Reportes que comunican mejor', color: 'var(--accent-green)', inicial: 'R' },
@@ -110,7 +109,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); setGuiaConductual(false); };
 
-  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'mi-aula';
+  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'mi-aula' || vistaActual === 'reportes';
 
   return (
     <>
@@ -202,6 +201,14 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 </div>
               </div>
             )}
+
+            {/* CORRECCIÓN: Confirmamos que la variable guiaConductual se lee aquí */}
+            {guiaConductual && vistaActual === 'reportes' && (
+              <div className="vark-stats-card" style={{ borderLeft: '4px solid var(--accent-yellow)' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>💡 Guía de Llenado</h4>
+                <details className="vark-accordion"><summary>📌 Eventualidades</summary><div><p>Vocabulario inadecuado, interrumpir clase, etc.</p></div></details>
+              </div>
+            )}
           </aside>
         )}
 
@@ -237,7 +244,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} />}
           {vistaActual === 'mis-grupos' && <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirGrupo} />}
           {vistaActual === 'vista-grupo' && grupoSeleccionado && (
-            <VistaGrupo key={`${grupoSeleccionado.id}-${grupoSeleccionado.tab}`} idGrupo={grupoSeleccionado.id} nombreGrupo={grupoSeleccionado.nombre} tabInicial={grupoSeleccionado.tab} onVolver={() => navegarModulo('mis-grupos')} onVarkChange={setVarkInfo} />
+            <VistaGrupo key={`${grupoSeleccionado.id}-${grupoSeleccionado.tab}`} idGrupo={grupoSeleccionado.id} nombreGrupo={grupoSeleccionado.nombre} tabInicial={grupoSeleccionado.tab as any} onVolver={() => navegarModulo('mis-grupos')} onVarkChange={setVarkInfo} />
           )}
 
           {/* NUEVAS VISTAS: MI AULA */}
