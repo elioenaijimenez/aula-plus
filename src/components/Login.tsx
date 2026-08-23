@@ -4,7 +4,8 @@ import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersis
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
-export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin', user: any) => void }) {
+// AÑADIDO: 'alumno' a los roles permitidos
+export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin' | 'alumno', user: any) => void }) {
   const [paso, setPaso] = useState<1 | 2>(1);
   const [email, setEmail] = useState('');
   
@@ -45,12 +46,10 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         }
 
         try {
-          // Buscamos CUALQUIER llave asociada a este correo (activa o caducada)
           const q = query(collection(db, 'keys'), where('correo', '==', userEmail));
           const querySnapshot = await getDocs(q);
 
           if (!querySnapshot.empty) {
-            // Revisamos si alguna de sus llaves sigue 'en uso'
             const llavesActivas = querySnapshot.docs.filter(d => d.data().estado === 'en uso');
             
             if (llavesActivas.length > 0) {
@@ -70,7 +69,6 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
                 onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
               }
             } else {
-              // Tiene llaves, pero TODAS están caducadas/revocadas
               alert("🛑 Acceso Denegado.\nTu licencia KeyPlus actual ha expirado o fue revocada por el Administrador. Ingresa una nueva licencia válida.");
               setPaso(2);
               setVerificandoSesion(false);
@@ -218,6 +216,19 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
             </button>
           </form>
         )}
+
+        {/* NUEVO: Acceso directo para alumnos */}
+        <div style={{ marginTop: '2.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', textAlign: 'center', animation: 'fadeIn 0.5s' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: '0 0 1rem 0' }}>¿Eres estudiante y buscas tus actividades?</p>
+          <button 
+            onClick={() => onLogin('alumno', null)} 
+            className="pill-btn hover-opacity" 
+            style={{ width: '100%', padding: '0.8rem', background: 'var(--bg-input)', color: 'var(--accent-blue)', border: '2px dashed var(--accent-blue)', fontWeight: 'bold', fontSize: '1.1rem' }}
+          >
+            👨‍🎓 Entrar a mi Pizarra
+          </button>
+        </div>
+
       </div>
     </div>
   );
