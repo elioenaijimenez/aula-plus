@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 import jsPDF from 'jspdf';
@@ -14,11 +14,19 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
   const [cargando, setCargando] = useState(true);
   const [modo, setModo] = useState<'grupo' | 'alumno'>('grupo');
   const [trimestreFiltro, setTrimestreFiltro] = useState<'1' | '2' | '3' | 'anual'>('anual');
+  const [userEmail, setUserEmail] = useState('');
   
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<Alumno | null>(null);
 
   useEffect(() => {
+    // Extraer correo de sesión
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    if (sessionLocal) {
+      const sessionData = JSON.parse(sessionLocal);
+      setUserEmail(sessionData?.user?.email || sessionData?.email || '');
+    }
+
     const fetchData = async () => {
       setCargando(true);
       const qAlumnos = query(collection(db, `groups/${idGrupo}/students`), orderBy('studentNumber', 'asc'));
@@ -54,6 +62,21 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
     setAlumnoSeleccionado(encontrado || null);
   };
 
+  // Función genérica para obtener el perfil desde la nube
+  const obtenerPerfilNube = async () => {
+    if (!userEmail) return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
+    try {
+      const docRef = doc(db, 'teacher_settings', userEmail);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().memoriaEscolar) {
+        return docSnap.data().memoriaEscolar;
+      }
+    } catch (error) {
+      console.error("Error al obtener perfil de la nube", error);
+    }
+    return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
+  };
+
   const evidenciasFiltradas = trimestreFiltro === 'anual' ? evidencias : evidencias.filter(e => e.trimestre === trimestreFiltro);
 
   let promedioGrupal = 0;
@@ -80,17 +103,14 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
     actividadesEnRiesgo = statsActividades.filter(a => a.porcentaje <= 50).sort((a,b) => a.porcentaje - b.porcentaje);
   }
 
-  const exportarKardexWord = () => {
+  const exportarKardexWord = async () => {
     if (!alumnoSeleccionado) return;
     
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada (Actualiza tu Perfil)';
-    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
+    const ubicacion = perfilNube.ubicacion || 'Ubicación no registrada';
     const enfasisTxt = grupo.emphasis ? `<br/><b>Énfasis:</b> ${grupo.emphasis}` : '';
     
     let pendientes = 0;
@@ -161,19 +181,17 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  const exportarKardexPDF = () => {
+  const exportarKardexPDF = async () => {
     if (!alumnoSeleccionado) return;
-    const doc = new jsPDF();
     
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada';
-    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
+    const ubicacion = perfilNube.ubicacion || 'Ubicación no registrada';
     const enfasisTxt = grupo.emphasis ? ` - Énfasis: ${grupo.emphasis}` : '';
+
+    const doc = new jsPDF();
 
     // Encabezado
     doc.setFontSize(16);
@@ -199,7 +217,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
     doc.text(`Ciclo Escolar: ${grupo.schoolYear}   |   Trimestre Analizado: ${trimestreFiltro === 'anual' ? 'Todos' : trimestreFiltro}`, 14, 51);
     doc.text(`Grado y Grupo: ${grupo.name}   |   Disciplina: ${grupo.subject}${enfasisTxt}`, 14, 57);
 
-    // Generar Datos de Tabla con validación estricta para TypeScript
     let pendientes = 0;
     const bodyData = evidenciasFiltradas.map(ev => {
       const cal = ev.calificaciones[alumnoSeleccionado.id] !== undefined ? ev.calificaciones[alumnoSeleccionado.id] : ev.puntajeMinimo;
@@ -307,7 +324,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
                 </div>
               </div>
 
-              {/* Sugerencia Pedagógica */}
               <TutorialTooltip mensaje="Identifica automáticamente las actividades que tus alumnos no entregaron o reprobaron para ajustar tu metodología.">
                 <div style={{ backgroundColor: 'rgba(255, 77, 79, 0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255, 77, 79, 0.2)' }}>
                   <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-red)' }}>⚠️ Cuellos de Botella (Mayor índice de no entrega)</h4>
@@ -332,7 +348,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
           {/* --- VISTA POR ALUMNO (KARDEX) --- */}
           {modo === 'alumno' && (
             <div>
-              {/* Buscador Combobox */}
               <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Buscar Estudiante:</label>
                 <input 
@@ -354,7 +369,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
               ) : (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
                   
-                  {/* DISEÑO DE DESCARGA COMPACTO */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '1.5rem', borderRadius: '16px' }}>
                     <div>
                       <h4 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>{alumnoSeleccionado.fullName}</h4>

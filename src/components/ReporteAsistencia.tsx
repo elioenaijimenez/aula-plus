@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 import jsPDF from 'jspdf';
@@ -35,6 +35,7 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<StatsAlumno | null>(null);
   const [statsGenerales, setStatsGenerales] = useState<StatsAlumno[]>([]);
+  const [userEmail, setUserEmail] = useState('');
   
   const [filtroActivo, setFiltroActivo] = useState<'TODOS'|'P'|'R'|'F'|'J'>('TODOS');
   const [modalExportar, setModalExportar] = useState(false);
@@ -64,6 +65,12 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
   };
 
   useEffect(() => {
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    if (sessionLocal) {
+      const sessionData = JSON.parse(sessionLocal);
+      setUserEmail(sessionData?.user?.email || sessionData?.email || '');
+    }
+
     const fetchData = async () => {
       setCargando(true);
       const qAlumnos = query(collection(db, `groups/${idGrupo}/students`), orderBy('studentNumber', 'asc'));
@@ -133,18 +140,30 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
     setMesesSeleccionados(prev => prev.includes(mes) ? prev.filter(m => m !== mes) : [...prev, mes]);
   };
 
+  // Función genérica para obtener el perfil desde la nube
+  const obtenerPerfilNube = async () => {
+    if (!userEmail) return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
+    try {
+      const docRef = doc(db, 'teacher_settings', userEmail);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().memoriaEscolar) {
+        return docSnap.data().memoriaEscolar;
+      }
+    } catch (error) {
+      console.error("Error al obtener perfil de la nube", error);
+    }
+    return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
+  };
+
   const generarDocumentoWord = async () => {
     if (!alumnoSeleccionado) return;
     if (mesesSeleccionados.length === 0) { alert("Selecciona al menos un mes para exportar."); return; }
 
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada (Actualiza tu perfil)';
-    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
+    const ubicacion = perfilNube.ubicacion || 'Ubicación no registrada';
     const enfasisTxt = grupo.emphasis ? `<br/><b>Énfasis:</b> ${grupo.emphasis}` : '';
 
     let registrosAExportar = alumnoSeleccionado.registroCompleto.filter(r => mesesSeleccionados.includes(obtenerMesAnio(r.fecha)));
@@ -257,14 +276,11 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
     if (!alumnoSeleccionado) return;
     if (mesesSeleccionados.length === 0) { alert("Selecciona al menos un mes para exportar."); return; }
 
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada';
-    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
+    const ubicacion = perfilNube.ubicacion || 'Ubicación no registrada';
     const enfasisTxt = grupo.emphasis ? ` - Énfasis: ${grupo.emphasis}` : '';
 
     let registrosAExportar = alumnoSeleccionado.registroCompleto.filter(r => mesesSeleccionados.includes(obtenerMesAnio(r.fecha)));
@@ -349,7 +365,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
     let finalY = (docRef as any).lastAutoTable.finalY + 15;
     const pageHeight = docRef.internal.pageSize.height;
 
-    // Añadir carta de compromiso si es citatorio
     if (tipoExportacion === 'citatorio') {
       if (finalY > pageHeight - 50) { docRef.addPage(); finalY = 20; }
       docRef.setFillColor(230, 240, 255);
@@ -368,7 +383,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
       finalY += 30;
     }
 
-    // Firmas
     if (finalY > pageHeight - 40) { docRef.addPage(); finalY = 20; }
     finalY += 20;
     docRef.setTextColor(0, 0, 0);
@@ -457,7 +471,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
         <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No has pasado lista en este grupo.</div>
       ) : (
         <>
-          {/* --- VISTA GRUPAL --- */}
           {modo === 'grupo' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -490,7 +503,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
             </div>
           )}
 
-          {/* --- VISTA POR ALUMNO --- */}
           {modo === 'alumno' && (
             <div>
               <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
@@ -521,7 +533,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
                     </TutorialTooltip>
                   </div>
 
-                  {/* TARJETAS INTERACTIVAS */}
                   <TutorialTooltip mensaje="Haz clic en cualquier tarjeta para filtrar y ver las fechas exactas de ese estatus.">
                     <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
                       <div onClick={() => alternarFiltro('P')} style={{ flex: 1, minWidth: '100px', textAlign: 'center', backgroundColor: 'rgba(46, 229, 92, 0.1)', padding: '1rem', borderRadius: '12px', border: `2px solid ${filtroActivo === 'P' ? 'var(--accent-green)' : 'transparent'}`, cursor: 'pointer', opacity: filtroActivo === 'TODOS' || filtroActivo === 'P' ? 1 : 0.5, transition: 'all 0.2s' }}>
