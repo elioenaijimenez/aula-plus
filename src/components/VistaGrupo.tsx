@@ -1,13 +1,10 @@
 import { useState } from 'react';
 import TabAlumnos from './TabAlumnos';
 import TabAsistencia from './TabAsistencia';
-import TabEvidencias from './TabEvidencias';
 
-// Agregamos tabInicial a las propiedades
-export default function VistaGrupo({ idGrupo, nombreGrupo, tabInicial = 'alumnos', onVolver, onVarkChange }: { idGrupo: string, nombreGrupo: string, tabInicial?: 'alumnos' | 'asistencia' | 'evidencias', onVolver: () => void, onVarkChange: (data: any) => void }) {
+export default function VistaGrupo({ idGrupo, nombreGrupo, tabInicial = 'alumnos', onVolver, onVarkChange }: { idGrupo: string, nombreGrupo: string, tabInicial?: 'alumnos' | 'asistencia', onVolver: () => void, onVarkChange: (data: any) => void }) {
   
-  // Iniciamos la pantalla en la pestaña que el usuario haya elegido
-  const [tabActiva, setTabActiva] = useState<'alumnos' | 'asistencia' | 'evidencias'>(tabInicial);
+  const [tabActiva, setTabActiva] = useState<'alumnos' | 'asistencia'>(tabInicial);
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
@@ -26,16 +23,12 @@ export default function VistaGrupo({ idGrupo, nombreGrupo, tabInicial = 'alumnos
           👥 Gestión y VARK
         </span>
         <span className={`tab ${tabActiva === 'asistencia' ? 'active' : ''}`} onClick={() => setTabActiva('asistencia')}>
-          📅 Pase de Lista
-        </span>
-        <span className={`tab ${tabActiva === 'evidencias' ? 'active' : ''}`} onClick={() => setTabActiva('evidencias')}>
-          📁 Evidencias y Tareas
+          📅 Pase de Lista Oficial
         </span>
       </div>
 
       {tabActiva === 'alumnos' && <TabAlumnos idGrupo={idGrupo} nombreGrupo={nombreGrupo} onVarkChange={onVarkChange} />}
-      {tabActiva === 'asistencia' && <TabAsistencia idGrupo={idGrupo} />}
-      {tabActiva === 'evidencias' && <TabEvidencias idGrupo={idGrupo} />}
+      {tabActiva === 'asistencia' && <TabAsistencia idGrupo={idGrupo} grupo={{name: nombreGrupo}} onVolver={onVolver} />}
       
     </div>
   );
