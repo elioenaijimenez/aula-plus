@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, increment } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 interface EvidenciaPublica { 
   id: string; titulo: string; descripcion: string; tipo: string; 
   enlaceDrive: string; vistas: number; likes: number; 
-  fechaActividad: string; trimestre: string; 
+  fechaActividad: string; fechaFinAviso?: string; trimestre: string; 
 }
 
 export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
@@ -16,11 +16,17 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
   const [grupoData, setGrupoData] = useState<any>(null);
   const [actividades, setActividades] = useState<EvidenciaPublica[]>([]);
   const [trimestreActivo, setTrimestreActivo] = useState('1');
+  const [ahora, setAhora] = useState(new Date());
 
-  // Guardamos en localstorage a qué le ha dado like para evitar spam
   const [likesLocales, setLikesLocales] = useState<string[]>(() => {
     return JSON.parse(localStorage.getItem('aulaPlus_likes') || '[]');
   });
+
+  // Reloj interno para actualizar la cuenta regresiva cada minuto
+  useEffect(() => {
+    const int = setInterval(() => setAhora(new Date()), 60000);
+    return () => clearInterval(int);
+  }, []);
 
   const buscarPizarra = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +35,6 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     setError('');
 
     try {
-      // 1. Buscar el Grupo por el Código
       const qGrupo = query(collection(db, 'groups'), where('pizarraCode', '==', codigo.toUpperCase()));
       const snapGrupo = await getDocs(qGrupo);
 
@@ -43,17 +48,14 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
       const gData = docGrupo.data();
       setGrupoData({ id: docGrupo.id, ...gData });
 
-      // 2. Buscar las Actividades (solo las publicadas)
       const qActs = query(collection(db, `groups/${docGrupo.id}/evidences`), where('publicada', '==', true));
       const snapActs = await getDocs(qActs);
       const listaActs: EvidenciaPublica[] = [];
       
       snapActs.forEach(d => listaActs.push({ id: d.id, ...d.data() } as EvidenciaPublica));
-      
-      // Ordenar por fecha
       listaActs.sort((a, b) => b.fechaActividad.localeCompare(a.fechaActividad));
-      setActividades(listaActs);
       
+      setActividades(listaActs);
     } catch (err) {
       setError('Error al conectar con la pizarra.');
     }
@@ -63,17 +65,14 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
   const registrarVista = async (act: EvidenciaPublica) => {
     if (act.enlaceDrive) {
       window.open(act.enlaceDrive, '_blank');
-      // Incrementar vista en Firebase
       const refAct = doc(db, `groups/${grupoData.id}/evidences`, act.id);
       await updateDoc(refAct, { vistas: increment(1) });
-      // Actualizar estado local
       setActividades(prev => prev.map(a => a.id === act.id ? { ...a, vistas: a.vistas + 1 } : a));
     }
   };
 
   const darLike = async (idActividad: string) => {
-    if (likesLocales.includes(idActividad)) return; // Ya le dio like
-    
+    if (likesLocales.includes(idActividad)) return; 
     const nuevosLikes = [...likesLocales, idActividad];
     setLikesLocales(nuevosLikes);
     localStorage.setItem('aulaPlus_likes', JSON.stringify(nuevosLikes));
@@ -81,6 +80,35 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     const refAct = doc(db, `groups/${grupoData.id}/evidences`, idActividad);
     await updateDoc(refAct, { likes: increment(1) });
     setActividades(prev => prev.map(a => a.id === idActividad ? { ...a, likes: a.likes + 1 } : a));
+  };
+
+  const generarGoogleCalendarLink = (aviso: EvidenciaPublica) => {
+    const text = encodeURIComponent(`Aviso Escolar: ${aviso.titulo}`);
+    const details = encodeURIComponent(aviso.descripcion);
+    let dates = "";
+    
+    // Convertimos la fecha a formato de Google Calendar (YYYYMMDDTHHMMSSZ)
+    if (aviso.fechaActividad) {
+       const startStr = new Date(aviso.fechaActividad).toISOString().replace(/-|:|\.\d\d\d/g, "");
+       const endStr = aviso.fechaFinAviso ? new Date(aviso.fechaFinAviso).toISOString().replace(/-|:|\.\d\d\d/g, "") : startStr;
+       dates = `&dates=${startStr}/${endStr}`;
+    }
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&details=${details}${dates}`;
+  };
+
+  const calcularTiempoRestante = (fechaFin: string) => {
+    if (!fechaFin) return null;
+    const target = new Date(fechaFin);
+    const diff = target.getTime() - ahora.getTime();
+    
+    if (diff <= 0) return 'Expirado';
+    
+    const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const m = Math.floor((diff / 1000 / 60) % 60);
+    
+    if (d > 0) return `Termina en ${d} d y ${h} hrs`;
+    return `Termina en ${h} hrs y ${m} min`;
   };
 
   if (!grupoData) {
@@ -112,14 +140,35 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     );
   }
 
-  const actividadesTrimestre = actividades.filter(a => a.trimestre === trimestreActivo);
+  const avisosGenerales = actividades.filter(a => a.tipo === 'Aviso');
+  const actividadesTrimestre = actividades.filter(a => a.trimestre === trimestreActivo && a.tipo !== 'Aviso');
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', paddingBottom: '3rem', animation: 'fadeIn 0.4s' }}>
       
+      {/* MAGIA CSS: Animación para el brillo dorado de los avisos */}
+      <style>{`
+        @keyframes pulseGlow {
+          0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+          70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+        }
+      `}</style>
+
       {/* HEADER DE LA PIZARRA */}
       <header style={{ backgroundColor: '#1C51FF', color: 'white', padding: '2rem 1rem', textAlign: 'center', borderBottomLeftRadius: '30px', borderBottomRightRadius: '30px', boxShadow: '0 4px 20px rgba(28, 81, 255, 0.3)', position: 'relative' }}>
-        <button onClick={() => setGrupoData(null)} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold' }}>← Salir</button>
+        <button onClick={() => setGrupoData(null)} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>← Salir</button>
+        
+        {/* CAMPANITA DE AVISOS */}
+        {avisosGenerales.length > 0 && (
+          <div style={{ position: 'absolute', top: '20px', right: '20px', fontSize: '1.5rem', animation: 'pulseGlow 2s infinite', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            🔔
+            <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#FFC107', color: '#000', fontSize: '0.7rem', fontWeight: 'bold', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {avisosGenerales.length}
+            </span>
+          </div>
+        )}
+
         <span style={{ fontSize: '3rem', display: 'block', margin: '1rem 0' }}>📌</span>
         <h1 style={{ margin: 0, fontSize: '1.8rem', lineHeight: '1.2' }}>Pizarra de {grupoData.subject}</h1>
         <p style={{ margin: '0.5rem 0 0 0', opacity: 0.9, fontSize: '1.1rem' }}>Grupo: <b>{grupoData.name}</b> {grupoData.emphasis && `• ${grupoData.emphasis}`}</p>
@@ -127,6 +176,47 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
 
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '0 1rem' }}>
         
+        {/* SECCIÓN DE AVISOS DORADOS */}
+        {avisosGenerales.length > 0 && (
+          <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {avisosGenerales.map(aviso => {
+              const tiempoRestante = calcularTiempoRestante(aviso.fechaFinAviso || '');
+              const expirado = tiempoRestante === 'Expirado';
+
+              return (
+                <div key={aviso.id} style={{ backgroundColor: '#fffdf5', borderRadius: '20px', padding: '1.5rem', border: '2px solid #FFC107', boxShadow: '0 8px 25px rgba(255, 193, 7, 0.2)', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.8rem' }}>
+                    <span style={{ backgroundColor: '#FFC107', color: '#000', padding: '4px 12px', borderRadius: '50px', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      🔔 AVISO IMPORTANTE
+                    </span>
+                    {aviso.fechaFinAviso && (
+                      <span style={{ fontSize: '0.9rem', color: expirado ? '#E91E63' : '#b28000', fontWeight: 'bold', backgroundColor: expirado ? 'rgba(233, 30, 99, 0.1)' : 'rgba(255, 193, 7, 0.2)', padding: '4px 10px', borderRadius: '8px' }}>
+                        {expirado ? 'Vencido' : `⏳ ${tiempoRestante}`}
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.4rem', color: '#b28000' }}>{aviso.titulo}</h3>
+                  <p style={{ margin: '0 0 1.5rem 0', color: '#555', lineHeight: '1.5', fontSize: '1rem', whiteSpace: 'pre-wrap' }}>{aviso.descripcion}</p>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,193,7,0.3)', paddingTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                    <span style={{ fontSize: '0.85rem', color: '#888', fontWeight: 'bold' }}>Emitido: {aviso.fechaActividad}</span>
+                    
+                    <a 
+                      href={generarGoogleCalendarLink(aviso)} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ padding: '0.6rem 1.2rem', borderRadius: '12px', backgroundColor: '#fff', border: '1px solid #FFC107', color: '#b28000', fontWeight: 'bold', textDecoration: 'none', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      📅 Añadir a mi Calendario
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* TABS TRIMESTRES */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '2rem', marginBottom: '2rem' }}>
           {['1', '2', '3'].map(t => (
@@ -139,7 +229,7 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
           ))}
         </div>
 
-        {/* FEED DE ACTIVIDADES */}
+        {/* FEED DE ACTIVIDADES NORMALES */}
         {actividadesTrimestre.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#888', background: 'white', borderRadius: '20px', border: '2px dashed #ccc' }}>
             <span style={{ fontSize: '3rem' }}>📭</span>
@@ -153,10 +243,10 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
               return (
                 <div key={act.id} style={{ backgroundColor: 'white', borderRadius: '20px', padding: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden' }}>
                   
-                  <div style={{ position: 'absolute', top: 0, left: 0, width: '6px', height: '100%', backgroundColor: '#FFC107' }}></div>
+                  <div style={{ position: 'absolute', top: 0, left: 0, width: '6px', height: '100%', backgroundColor: '#1C51FF' }}></div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
-                    <span style={{ backgroundColor: 'rgba(255, 193, 7, 0.1)', color: '#b28000', padding: '4px 10px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                    <span style={{ backgroundColor: 'rgba(28, 81, 255, 0.1)', color: '#1C51FF', padding: '4px 10px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase' }}>
                       {act.tipo}
                     </span>
                     <span style={{ fontSize: '0.85rem', color: '#888', fontWeight: 'bold' }}>📅 {act.fechaActividad}</span>

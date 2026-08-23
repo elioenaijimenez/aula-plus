@@ -67,8 +67,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // --- NUEVO: PREVENCIÓN DE PANTALLA NEGRA ---
-  // Si el navegador intenta abrir una vista que requiere un grupo, pero no hay grupo en memoria, lo regresamos a elegir.
   useEffect(() => {
     if (vistaActual === 'mi-aula' && !aulaSeleccionada) {
       setVistaActual('mis-grupos-aula');
@@ -78,7 +76,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
       window.history.replaceState(null, '', '#mis-grupos');
     }
   }, [vistaActual, aulaSeleccionada, grupoSeleccionado]);
-  // -------------------------------------------
 
   const navegarModulo = (modulo: any) => {
     verificarVigenciaKeyPlus(userEmail); 
@@ -162,6 +159,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); setGuiaConductual(false); };
 
+  // CORRECCIÓN APLICADA AQUÍ: Restauramos las vistas donde la barra lateral sí debe aparecer
   const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'reportes';
 
   return (
@@ -282,7 +280,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
                 {modulos.map((mod) => (
                   <TutorialTooltip key={mod.id} mensaje={`Da clic para acceder a ${mod.titulo}`} esBloque={true} posicion="top">
-                    <div className="activity-card" onClick={() => navegarModulo(mod.id)} style={{ cursor: 'pointer', margin: 0 }}>
+                    <div className="activity-card hover-scale" onClick={() => navegarModulo(mod.id)} style={{ cursor: 'pointer', margin: 0, transition: 'all 0.2s' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                         <div className="circle-icon" style={{ backgroundColor: 'var(--bg-app)', color: mod.color, border: `1px solid ${mod.color}` }}>{mod.inicial}</div>
                         <div>
@@ -294,6 +292,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                   </TutorialTooltip>
                 ))}
               </div>
+              <style>{`.hover-scale:hover { transform: scale(1.03); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }`}</style>
             </div>
           )}
 
@@ -327,20 +326,14 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 <h2 style={{ margin: '0.5rem 0', color: 'var(--accent-purple)', fontSize: '2rem' }}>Acceso a Mi Aula Virtual</h2>
                 <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Selecciona un grupo para gestionar su Pizarra y sus Actividades.</p>
               </div>
-              
               <style>{`
                 .mi-aula-theme .activity-card { border-top: 4px solid var(--accent-purple) !important; background-color: var(--bg-panel) !important; }
                 .mi-aula-theme h3 { color: var(--accent-purple) !important; }
                 .mi-aula-theme button.pill-btn { background-color: var(--accent-purple) !important; }
-                
-                /* Ocultar el botón superior de "Crear Grupo" */
                 .mi-aula-theme > div > div:first-child > button { display: none !important; }
-                
-                /* Ocultar Asistencia, Editar y Eliminar de las tarjetas */
                 .mi-aula-theme .activity-card button:nth-of-type(n+2) { display: none !important; }
               `}</style>
-              
-              <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirMiAula} />
+              <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirMiAula} modoAula={true} />
             </div>
           )}
 

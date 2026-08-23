@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
-// CORRECCIÓN: Agregamos setDoc a la importación
 import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc, getDocs, where, orderBy, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import CalificarEvidencia from './CalificarEvidencia';
 import TutorialTooltip from './TutorialTooltip';
 
-// --- INTERFACES ---
 interface Evidencia { 
   id: string; titulo: string; descripcion: string; tipo: string;
   enlaceDrive: string; publicada: boolean; vistas: number; likes: number;
-  puntajeMinimo: number; puntajeMaximo: number; fechaActividad: string; 
-  trimestre: string; numero?: number; createdAt?: any; calificaciones?: Record<string, number>; 
+  puntajeMinimo?: number; puntajeMaximo?: number; fechaActividad: string; 
+  fechaFinAviso?: string; // NUEVO CAMPO PARA AVISOS
+  trimestre?: string; numero?: number; createdAt?: any; calificaciones?: Record<string, number>; 
 }
 
 interface Recurso { 
@@ -18,7 +17,6 @@ interface Recurso {
   categoria: string; grado?: string; campoFormativo?: string; docenteEmail?: string; isGlobal?: boolean;
 }
 
-// --- HELPERS DE DISEÑO PARA BIBLIOTECA Y DRIVE ---
 const obtenerEstiloCategoria = (categoria: string) => {
   switch (categoria) {
     case 'LTG': return { icon: '📚', color: '#4CAF50', bg: 'rgba(76, 175, 80, 0.1)' }; 
@@ -67,23 +65,19 @@ const BotonEstrella = ({ esFavorito, onToggle }: { esFavorito: boolean, onToggle
 };
 
 export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: string, nombreGrupo: string, onVolver: () => void }) {
-  // Estados Generales
   const [vista, setVista] = useState<'panel' | 'formulario' | 'calificar'>('panel');
   const [tab, setTab] = useState<'actividades' | 'biblioteca' | 'drive'>('actividades');
   
-  // CORRECCIÓN: Quitamos setUserEmail porque no se usa para modificar el estado, solo lo leemos.
   const [userEmail] = useState(() => {
     const sessionLocal = localStorage.getItem('aulaPlusSession');
     return sessionLocal ? (JSON.parse(sessionLocal)?.user?.email || JSON.parse(sessionLocal)?.email || '') : '';
   });
   
-  // Estados Actividades
   const [evidencias, setEvidencias] = useState<Evidencia[]>([]);
   const [evidenciaActiva, setEvidenciaActiva] = useState<Evidencia | null>(null);
   const [pizarraCode, setPizarraCode] = useState<string>('Generando...');
   const [filtroTrimestre, setFiltroTrimestre] = useState<'Todos' | '1' | '2' | '3'>('Todos');
   
-  // Estados Formulario Actividades
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -95,15 +89,16 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
   const [trimestre, setTrimestre] = useState('1'); 
   const [publicada, setPublicada] = useState(true);
   const [guardando, setGuardando] = useState(false);
-  const [fechaActividad, setFechaActividad] = useState(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().split('T')[0]; });
+  
+  const obtenerFechaLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().split('T')[0]; };
+  const [fechaActividad, setFechaActividad] = useState(obtenerFechaLocal());
+  const [fechaFinAviso, setFechaFinAviso] = useState(''); // NUEVO: Fecha y hora de caducidad para avisos
 
-  // Estados Biblioteca y Drive
   const [recursosGlobales, setRecursosGlobales] = useState<Recurso[]>([]);
   const [misRecursos, setMisRecursos] = useState<Recurso[]>([]);
   const [favoritosIds, setFavoritosIds] = useState<string[]>([]);
   const [cargandoRecursos, setCargandoRecursos] = useState(false);
   
-  // Formulario Drive
   const [creandoDrive, setCreandoDrive] = useState(false);
   const [recursoEditando, setRecursoEditando] = useState<Recurso | null>(null);
   const [nuevoTituloDrive, setNuevoTituloDrive] = useState('');
@@ -111,16 +106,13 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
   const [nuevaDescDrive, setNuevaDescDrive] = useState('');
 
   useEffect(() => {
-    // 1. Inicializar Pizarra Code
     const inicializarPizarra = async () => {
       const refGrupo = doc(db, 'groups', idGrupo);
       const docSnap = await getDoc(refGrupo);
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.pizarraCode) {
-          setPizarraCode(data.pizarraCode);
-        } else {
-          // Genera una clave aleatoria corta (ej. AULA-Y6T9)
+        if (data.pizarraCode) setPizarraCode(data.pizarraCode);
+        else {
           const newCode = 'AULA-' + Math.random().toString(36).substring(2, 6).toUpperCase();
           await updateDoc(refGrupo, { pizarraCode: newCode });
           setPizarraCode(newCode);
@@ -129,29 +121,27 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
     };
     inicializarPizarra();
 
-    // 2. Cargar Actividades
     const qActs = query(collection(db, `groups/${idGrupo}/evidences`));
     const desuscribirActs = onSnapshot(qActs, (snapshot) => {
       const lista: Evidencia[] = [];
       snapshot.forEach(doc => lista.push({ id: doc.id, ...doc.data() } as Evidencia));
-      
       lista.sort((a, b) => {
         const comp = a.fechaActividad.localeCompare(b.fechaActividad);
-        if (comp === 0) {
-           const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-           const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-           return timeA - timeB;
-        }
+        if (comp === 0) return (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0) - (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0);
         return comp;
       });
-      const listaNumerada = lista.map((ev, index) => ({ ...ev, numero: index + 1, trimestre: ev.trimestre || '1' }));
-      setEvidencias(listaNumerada);
+      // Separamos el contador para actividades y avisos
+      let counter = 1;
+      const procesadas = lista.map(ev => {
+        if (ev.tipo === 'Aviso') return ev;
+        return { ...ev, numero: counter++, trimestre: ev.trimestre || '1' };
+      });
+      setEvidencias(procesadas);
     });
     return () => desuscribirActs();
   }, [idGrupo]);
 
   useEffect(() => {
-    // 3. Cargar Biblioteca Favoritos y Drive Personal
     const fetchRecursos = async () => {
       setCargandoRecursos(true);
       if (userEmail) {
@@ -179,35 +169,44 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
     fetchRecursos();
   }, [userEmail]);
 
-  // --- LÓGICA ACTIVIDADES ---
   const abrirFormulario = (ev?: Evidencia) => {
     if (ev) {
       setEditandoId(ev.id); setTitulo(ev.titulo); setDescripcion(ev.descripcion);
       setEnlaceDrive(ev.enlaceDrive || ''); setPublicada(ev.publicada ?? true);
-      setPuntajeMin(ev.puntajeMinimo || 5); setPuntajeMax(ev.puntajeMaximo || 10);
-      setFechaActividad(ev.fechaActividad); setTrimestre(ev.trimestre);
-      if (['Tarea', 'Trabajo en clase', 'Anotación', 'Proyecto'].includes(ev.tipo)) { setTipo(ev.tipo); setTipoOtro(''); } 
-      else { setTipo('Otro'); setTipoOtro(ev.tipo); }
+      setFechaActividad(ev.fechaActividad);
+      
+      if (ev.tipo === 'Aviso') {
+        setTipo('Aviso'); setTipoOtro(''); setFechaFinAviso(ev.fechaFinAviso || '');
+      } else {
+        setPuntajeMin(ev.puntajeMinimo || 5); setPuntajeMax(ev.puntajeMaximo || 10); setTrimestre(ev.trimestre || '1');
+        if (['Tarea', 'Trabajo en clase', 'Anotación', 'Proyecto'].includes(ev.tipo)) { setTipo(ev.tipo); setTipoOtro(''); } 
+        else { setTipo('Otro'); setTipoOtro(ev.tipo); }
+      }
     } else {
       setEditandoId(null); setTitulo(''); setDescripcion(''); setEnlaceDrive(''); setPublicada(true);
       setTipo('Tarea'); setTipoOtro(''); setPuntajeMin(5); setPuntajeMax(10);
-      setFechaActividad(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().split('T')[0]; });
-      setTrimestre('1');
+      setFechaActividad(obtenerFechaLocal()); setTrimestre('1'); setFechaFinAviso('');
     }
     setVista('formulario');
   };
 
   const guardarEvidencia = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (Number(puntajeMin) >= Number(puntajeMax)) { alert("El máximo debe ser mayor al mínimo."); return; }
     const tipoFinal = tipo === 'Otro' ? tipoOtro : tipo;
     if (!tipoFinal.trim()) { alert("Especifica el tipo de actividad."); return; }
 
     setGuardando(true);
-    const datosEvidencia = { 
-      titulo, descripcion, tipo: tipoFinal, enlaceDrive, publicada,
-      puntajeMinimo: Number(puntajeMin), puntajeMaximo: Number(puntajeMax), fechaActividad, trimestre 
-    };
+    const datosEvidencia: any = { titulo, descripcion, tipo: tipoFinal, enlaceDrive, publicada, fechaActividad };
+    
+    if (tipoFinal === 'Aviso') {
+      datosEvidencia.fechaFinAviso = fechaFinAviso;
+      datosEvidencia.trimestre = 'Avisos'; // Los aislamos de los trimestres normales
+    } else {
+      if (Number(puntajeMin) >= Number(puntajeMax)) { alert("El máximo debe ser mayor al mínimo."); setGuardando(false); return; }
+      datosEvidencia.puntajeMinimo = Number(puntajeMin);
+      datosEvidencia.puntajeMaximo = Number(puntajeMax);
+      datosEvidencia.trimestre = trimestre;
+    }
     
     try {
       if (editandoId) await updateDoc(doc(db, `groups/${idGrupo}/evidences`, editandoId), datosEvidencia); 
@@ -225,7 +224,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
     await updateDoc(doc(db, `groups/${idGrupo}/evidences`, id), { publicada: !estadoActual });
   };
 
-  // --- LÓGICA DRIVE Y FAVORITOS ---
   const toggleFavorito = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
     const nuevosFavs = favoritosIds.includes(id) ? favoritosIds.filter(favId => favId !== id) : [...favoritosIds, id];
@@ -271,7 +269,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
 
   const abrirRecurso = (url: string) => { if (url) window.open(url, '_blank'); else alert('Enlace inválido.'); };
 
-  // --- RENDERIZADO PRINCIPAL ---
   if (vista === 'calificar' && evidenciaActiva) return <CalificarEvidencia idGrupo={idGrupo} evidencia={evidenciaActiva as any} onVolver={() => setVista('panel')} />;
   
   if (vista === 'formulario') {
@@ -279,31 +276,42 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
       <div style={{ animation: 'fadeIn 0.3s' }}>
         <button onClick={() => setVista('panel')} className="pill-btn" style={{ marginBottom: '1rem', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>← Volver al Aula</button>
         <form onSubmit={guardarEvidencia} style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <h3 style={{ margin: '0 0 1rem 0', color: 'var(--accent-purple)' }}>{editandoId ? '✏️ Editar Actividad' : '✨ Crear Nueva Actividad'}</h3>
+          <h3 style={{ margin: '0 0 1rem 0', color: tipo === 'Aviso' ? 'var(--accent-yellow)' : 'var(--accent-purple)' }}>
+            {editandoId ? '✏️ Editar Registro' : '✨ Crear Nuevo Registro'}
+          </h3>
           
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ flex: 2, minWidth: '250px' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Título de la Actividad</label>
-              <input type="text" className="search-input" required value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ej. Resumen de la Revolución..." style={{ borderLeft: '4px solid var(--accent-purple)' }}/>
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Fecha de Aplicación</label>
-              <input type="date" className="search-input" required value={fechaActividad} onChange={e => setFechaActividad(e.target.value)} />
-            </div>
-          </div>
-
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Tipo de Actividad</label>
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Tipo de Registro</label>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: tipo === 'Otro' ? '0.8rem' : '0' }}>
-              {['Tarea', 'Trabajo en clase', 'Anotación', 'Proyecto', 'Otro'].map(t => (
-                <div key={t} onClick={() => setTipo(t)} style={{ padding: '0.5rem 1rem', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem', transition: 'all 0.2s', border: tipo === t ? '2px solid var(--accent-blue)' : '1px solid var(--border-color)', backgroundColor: tipo === t ? 'rgba(28, 81, 255, 0.1)' : 'transparent', color: tipo === t ? 'var(--accent-blue)' : 'var(--text-muted)' }}>{t}</div>
+              {['Tarea', 'Trabajo en clase', 'Anotación', 'Proyecto', 'Otro', 'Aviso'].map(t => (
+                <div key={t} onClick={() => setTipo(t)} style={{ padding: '0.5rem 1rem', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem', transition: 'all 0.2s', border: tipo === t ? `2px solid ${t==='Aviso'?'var(--accent-yellow)':'var(--accent-blue)'}` : '1px solid var(--border-color)', backgroundColor: tipo === t ? (t==='Aviso'?'rgba(255, 193, 7, 0.1)':'rgba(28, 81, 255, 0.1)') : 'transparent', color: tipo === t ? (t==='Aviso'?'var(--accent-yellow)':'var(--accent-blue)') : 'var(--text-muted)' }}>
+                  {t === 'Aviso' ? '🔔 Aviso / Recordatorio' : t}
+                </div>
               ))}
             </div>
-            {tipo === 'Otro' && <input type="text" className="search-input" required placeholder="Especificar..." value={tipoOtro} onChange={e => setTipoOtro(e.target.value)} style={{ animation: 'fadeIn 0.2s' }} />}
+            {tipo === 'Otro' && <input type="text" className="search-input" required placeholder="Especificar (Ej. Maqueta)..." value={tipoOtro} onChange={e => setTipoOtro(e.target.value)} style={{ animation: 'fadeIn 0.2s' }} />}
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 2, minWidth: '250px' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>{tipo === 'Aviso' ? 'Título del Aviso' : 'Título de la Actividad'}</label>
+              <input type="text" className="search-input" required value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ej. Resumen de la Revolución..." style={{ borderLeft: `4px solid ${tipo==='Aviso'?'var(--accent-yellow)':'var(--accent-purple)'}` }}/>
+            </div>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Fecha Inicial</label>
+              <input type="date" className="search-input" required value={fechaActividad} onChange={e => setFechaActividad(e.target.value)} />
+            </div>
+            {/* Si es AVISO, mostramos la fecha de caducidad */}
+            {tipo === 'Aviso' && (
+              <div style={{ flex: 1, minWidth: '150px', animation: 'fadeIn 0.3s' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--accent-yellow)', fontWeight: 'bold' }}>Caducidad (Opcional)</label>
+                <input type="datetime-local" className="search-input" value={fechaFinAviso} onChange={e => setFechaFinAviso(e.target.value)} style={{ borderColor: 'var(--accent-yellow)' }} />
+              </div>
+            )}
           </div>
 
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Instrucciones para el Alumno</label>
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>{tipo === 'Aviso' ? 'Mensaje o Instrucciones' : 'Descripción / Instrucciones'}</label>
             <textarea className="search-input" required value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Escribe aquí las instrucciones detalladas que verá el alumno..." style={{ minHeight: '80px', resize: 'vertical' }} />
           </div>
 
@@ -313,25 +321,30 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
             <input type="url" className="search-input" value={enlaceDrive} onChange={e => setEnlaceDrive(e.target.value)} placeholder="https://drive.google.com/file/d/..." />
           </div>
 
-          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '1.5rem', borderRadius: '16px' }}>
-            <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Trimestre</label><select className="search-input" value={trimestre} onChange={e => setTrimestre(e.target.value)}><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></div>
-            <div style={{ flex: 1, minWidth: '100px' }}><label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Cal. Mínima</label><input type="number" className="search-input" required value={puntajeMin} onChange={e => setPuntajeMin(Number(e.target.value))} min="0" /></div>
-            <div style={{ flex: 1, minWidth: '100px' }}><label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Cal. Máxima</label><input type="number" className="search-input" required value={puntajeMax} onChange={e => setPuntajeMax(Number(e.target.value))} min="1" style={{ borderColor: 'var(--accent-yellow)' }} /></div>
-          </div>
+          {/* Ocultamos las calificaciones si es un AVISO */}
+          {tipo !== 'Aviso' && (
+            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '1.5rem', borderRadius: '16px', animation: 'fadeIn 0.3s' }}>
+              <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Trimestre</label><select className="search-input" value={trimestre} onChange={e => setTrimestre(e.target.value)}><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></div>
+              <div style={{ flex: 1, minWidth: '100px' }}><label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Cal. Mínima</label><input type="number" className="search-input" required value={puntajeMin} onChange={e => setPuntajeMin(Number(e.target.value))} min="0" /></div>
+              <div style={{ flex: 1, minWidth: '100px' }}><label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Cal. Máxima</label><input type="number" className="search-input" required value={puntajeMax} onChange={e => setPuntajeMax(Number(e.target.value))} min="1" style={{ borderColor: 'var(--accent-yellow)' }} /></div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', cursor: 'pointer' }}>
               <input type="checkbox" checked={publicada} onChange={e => setPublicada(e.target.checked)} style={{ transform: 'scale(1.5)' }} />
               <span style={{ fontWeight: 'bold', color: publicada ? 'var(--accent-green)' : 'var(--text-muted)' }}>{publicada ? '📢 Visible en la Pizarra Alumno' : '🙈 Oculto (Borrador)'}</span>
             </label>
-            <button type="submit" disabled={guardando} className="pill-btn" style={{ background: 'var(--accent-purple)', color: 'white', padding: '1rem 3rem', fontSize: '1.1rem' }}>{guardando ? 'Guardando...' : '💾 Guardar Actividad'}</button>
+            <button type="submit" disabled={guardando} className="pill-btn" style={{ background: tipo === 'Aviso' ? 'var(--accent-yellow)' : 'var(--accent-purple)', color: tipo === 'Aviso' ? '#000' : 'white', padding: '1rem 3rem', fontSize: '1.1rem', fontWeight: 'bold' }}>
+              {guardando ? 'Guardando...' : `💾 Guardar ${tipo === 'Aviso' ? 'Aviso' : 'Actividad'}`}
+            </button>
           </div>
         </form>
       </div>
     );
   }
 
-  const evidenciasFiltradas = filtroTrimestre === 'Todos' ? evidencias : evidencias.filter(e => e.trimestre === filtroTrimestre);
+  const evidenciasFiltradas = filtroTrimestre === 'Todos' ? evidencias : evidencias.filter(e => e.trimestre === filtroTrimestre || e.tipo === 'Aviso');
   const librosFavoritos = recursosGlobales.filter(r => favoritosIds.includes(r.id));
 
   return (
@@ -472,42 +485,50 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
                 </button>
               ))}
             </div>
-            <TutorialTooltip mensaje="¡Ojo! Las actividades que crees aquí pueden enviarse a la pizarra de los alumnos para que las vean.">
-              <button onClick={() => abrirFormulario()} className="pill-btn" style={{ background: 'var(--accent-purple)', color: 'white', padding: '0.8rem 1.5rem' }}>✨ Crear Actividad</button>
-            </TutorialTooltip>
+            <button onClick={() => abrirFormulario()} className="pill-btn" style={{ background: 'var(--accent-purple)', color: 'white', padding: '0.8rem 1.5rem' }}>✨ Crear Registro</button>
           </div>
 
           {evidenciasFiltradas.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', borderRadius: '24px' }}>No tienes actividades en este trimestre.</div>
+            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', borderRadius: '24px' }}>No tienes actividades o avisos.</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-              {evidenciasFiltradas.map(ev => (
-                <div key={ev.id} className="activity-card" style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-panel)', margin: 0, borderTop: `4px solid var(--accent-purple)` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-main)', backgroundColor: 'var(--bg-input)', padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)' }}>{ev.tipo}</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>T-{ev.trimestre}</span>
-                  </div>
-                  <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1.2rem' }}><span style={{ color: 'var(--accent-purple)', marginRight: '0.3rem' }}>#{ev.numero}</span>{ev.titulo}</h4>
-                  <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.descripcion}</p>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '0.8rem', borderRadius: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <label className="switch"><input type="checkbox" checked={ev.publicada} onChange={() => togglePublicacion(ev.id, ev.publicada)} /><span className="slider"></span></label>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: ev.publicada ? 'var(--accent-green)' : 'var(--text-muted)' }}>Pizarra</span>
+              {evidenciasFiltradas.map(ev => {
+                const esAviso = ev.tipo === 'Aviso';
+                return (
+                  <div key={ev.id} className="activity-card" style={{ display: 'flex', flexDirection: 'column', backgroundColor: esAviso ? 'rgba(255, 193, 7, 0.05)' : 'var(--bg-panel)', margin: 0, borderTop: `4px solid ${esAviso ? 'var(--accent-yellow)' : 'var(--accent-purple)'}`, boxShadow: esAviso ? '0 0 15px rgba(255, 193, 7, 0.15)' : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: esAviso ? '#000' : 'var(--text-main)', backgroundColor: esAviso ? 'var(--accent-yellow)' : 'var(--bg-input)', padding: '0.3rem 0.6rem', borderRadius: '6px', border: esAviso ? 'none' : '1px solid var(--border-color)' }}>
+                        {esAviso ? '🔔 AVISO' : ev.tipo}
+                      </span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>
+                        {esAviso ? (ev.fechaFinAviso ? `Vence: ${new Date(ev.fechaFinAviso).toLocaleDateString()}` : 'Aviso General') : `T-${ev.trimestre}`}
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.8rem', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>
-                      <span title="Vistas en Pizarra">👁️ {ev.vistas || 0}</span>
-                      <span title="Likes de Alumnos">❤️ {ev.likes || 0}</span>
+                    <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1.2rem' }}>
+                      {!esAviso && <span style={{ color: 'var(--accent-purple)', marginRight: '0.3rem' }}>#{ev.numero}</span>}
+                      {ev.titulo}
+                    </h4>
+                    <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.descripcion}</p>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '0.8rem', borderRadius: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <label className="switch"><input type="checkbox" checked={ev.publicada} onChange={() => togglePublicacion(ev.id, ev.publicada)} /><span className="slider"></span></label>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: ev.publicada ? 'var(--accent-green)' : 'var(--text-muted)' }}>Pizarra</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.8rem', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>
+                        <span title="Vistas en Pizarra">👁️ {ev.vistas || 0}</span>
+                        <span title="Likes de Alumnos">❤️ {ev.likes || 0}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
+                      {!esAviso && <button onClick={() => { setEvidenciaActiva(ev); setVista('calificar'); }} className="pill-btn" style={{ flex: 1, background: 'var(--accent-blue)', color: 'white', padding: '0.6rem' }}>📝 Calificar</button>}
+                      <button onClick={() => abrirFormulario(ev)} className="pill-btn" style={{ background: 'var(--bg-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)', padding: '0.6rem' }} title="Editar">✏️</button>
+                      <button onClick={() => eliminarEvidencia(ev.id, ev.titulo)} className="pill-btn" style={{ background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none', padding: '0.6rem' }} title="Eliminar">🗑</button>
                     </div>
                   </div>
-
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
-                    <button onClick={() => { setEvidenciaActiva(ev); setVista('calificar'); }} className="pill-btn" style={{ flex: 1, background: 'var(--accent-blue)', color: 'white', padding: '0.6rem' }}>📝 Calificar</button>
-                    <button onClick={() => abrirFormulario(ev)} className="pill-btn" style={{ background: 'var(--bg-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)', padding: '0.6rem' }} title="Editar">✏️</button>
-                    <button onClick={() => eliminarEvidencia(ev.id, ev.titulo)} className="pill-btn" style={{ background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none', padding: '0.6rem' }} title="Eliminar">🗑</button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
