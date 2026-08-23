@@ -36,6 +36,7 @@ export default function GestorCalendarioAdmin() {
 
   // Estados para Fechas Oficiales
   const [fechas, setFechas] = useState<FechaOficial[]>([]);
+  const [eventoEditando, setEventoEditando] = useState<string | null>(null); // NUEVO: Estado para saber qué editamos
   const [tipoDuracion, setTipoDuracion] = useState<'dia' | 'periodo'>('dia');
   const [nuevaFecha, setNuevaFecha] = useState('');
   const [nuevaFechaFin, setNuevaFechaFin] = useState('');
@@ -49,7 +50,7 @@ export default function GestorCalendarioAdmin() {
   const [avisoInicio, setAvisoInicio] = useState('');
   const [avisoFin, setAvisoFin] = useState('');
 
-  // Fecha local para cálculos de vencimiento (Asegura que el corte sea a medianoche local)
+  // Fecha local para cálculos de vencimiento
   const obtenerFechaLocalString = () => {
     const fecha = new Date();
     const offset = fecha.getTimezoneOffset() * 60000;
@@ -64,7 +65,6 @@ export default function GestorCalendarioAdmin() {
   const cargarDatos = async () => {
     setCargando(true);
     try {
-      // 1. Cargar Fechas Oficiales
       const qOficiales = query(collection(db, 'calendario_oficial'));
       const snapOficiales = await getDocs(qOficiales);
       const listaFechas: FechaOficial[] = [];
@@ -72,7 +72,6 @@ export default function GestorCalendarioAdmin() {
       listaFechas.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
       setFechas(listaFechas);
 
-      // 2. Cargar Avisos Globales
       const qAvisos = query(collection(db, 'calendario_avisos'), orderBy('createdAt', 'desc'));
       const snapAvisos = await getDocs(qAvisos);
       const listaAvisos: AvisoGlobal[] = [];
@@ -86,6 +85,33 @@ export default function GestorCalendarioAdmin() {
   };
 
   // --- LÓGICA DE FECHAS OFICIALES ---
+  const iniciarEdicion = (evento: FechaOficial) => {
+    setEventoEditando(evento.id);
+    setNuevoTitulo(evento.titulo);
+    setNuevoTipo(evento.tipo);
+    setNuevaFecha(evento.fecha);
+    
+    if (evento.fechaFin) {
+      setTipoDuracion('periodo');
+      setNuevaFechaFin(evento.fechaFin);
+    } else {
+      setTipoDuracion('dia');
+      setNuevaFechaFin('');
+    }
+    
+    // Hacemos scroll suave hacia arriba para ver el formulario
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelarEdicion = () => {
+    setEventoEditando(null);
+    setNuevoTitulo('');
+    setNuevaFecha('');
+    setNuevaFechaFin('');
+    setTipoDuracion('dia');
+    setNuevoTipo('Festivo');
+  };
+
   const guardarFechaOficial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevaFecha || !nuevoTitulo) return;
@@ -94,19 +120,40 @@ export default function GestorCalendarioAdmin() {
     
     setGuardando(true);
     try {
-      const idUnico = `evt_${Date.now()}`;
-      const docRef = doc(db, 'calendario_oficial', idUnico);
+      // Si estamos editando, usamos el ID existente; si no, creamos uno nuevo
+      const idDoc = eventoEditando ? eventoEditando : `evt_${Date.now()}`;
+      const docRef = doc(db, 'calendario_oficial', idDoc);
       
-      const dataFecha: Omit<FechaOficial, 'id'> = { fecha: nuevaFecha, titulo: nuevoTitulo, tipo: nuevoTipo };
-      if (tipoDuracion === 'periodo') dataFecha.fechaFin = nuevaFechaFin;
+      const dataFecha: any = { 
+        fecha: nuevaFecha, 
+        titulo: nuevoTitulo, 
+        tipo: nuevoTipo 
+      };
       
-      await setDoc(docRef, dataFecha);
+      if (tipoDuracion === 'periodo') {
+        dataFecha.fechaFin = nuevaFechaFin;
+      } else {
+        // En caso de que haya cambiado de periodo a día, vaciamos la fecha de fin
+        dataFecha.fechaFin = '';
+      }
       
-      const nuevaLista = [...fechas, { id: idUnico, ...dataFecha }];
+      // setDoc con merge permite actualizar si existe o crear si no existe
+      await setDoc(docRef, dataFecha, { merge: true });
+      
+      const nuevoEvento = { id: idDoc, ...dataFecha };
+      let nuevaLista;
+      
+      if (eventoEditando) {
+        nuevaLista = fechas.map(f => f.id === eventoEditando ? nuevoEvento : f);
+      } else {
+        nuevaLista = [...fechas, nuevoEvento];
+      }
+      
       nuevaLista.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
-      
       setFechas(nuevaLista);
-      setNuevoTitulo(''); setNuevaFecha(''); setNuevaFechaFin(''); setTipoDuracion('dia');
+      
+      // Limpiamos el formulario
+      cancelarEdicion();
     } catch (error) {
       alert("Error al guardar la fecha oficial.");
     }
@@ -117,6 +164,7 @@ export default function GestorCalendarioAdmin() {
     if (window.confirm("¿Seguro que deseas eliminar este evento oficial?")) {
       await deleteDoc(doc(db, 'calendario_oficial', id));
       setFechas(fechas.filter(f => f.id !== id));
+      if (eventoEditando === id) cancelarEdicion(); // Si borra el que estaba editando, limpiamos el form
     }
   };
 
@@ -129,6 +177,7 @@ export default function GestorCalendarioAdmin() {
           await deleteDoc(doc(db, 'calendario_oficial', fecha.id));
         }
         setFechas([]);
+        cancelarEdicion();
         alert("El calendario oficial ha sido reiniciado.");
       } catch (error) {
         alert("Hubo un error al limpiar el calendario.");
@@ -177,7 +226,6 @@ export default function GestorCalendarioAdmin() {
     return `${day}/${month}/${year}`;
   };
 
-  // Filtros automáticos por vigencia
   const avisosVigentes = avisos.filter(a => a.fechaFin >= hoyLocalString);
   const avisosPasados = avisos.filter(a => a.fechaFin < hoyLocalString);
 
@@ -187,13 +235,13 @@ export default function GestorCalendarioAdmin() {
       {/* NAVEGACIÓN INTERNA */}
       <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem' }}>
         <button 
-          onClick={() => setTabActiva('oficiales')} 
+          onClick={() => { setTabActiva('oficiales'); cancelarEdicion(); }} 
           style={{ background: 'none', border: 'none', fontSize: '1.2rem', fontWeight: tabActiva === 'oficiales' ? 'bold' : 'normal', color: tabActiva === 'oficiales' ? 'var(--accent-blue)' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
         >
           📅 Días Oficiales
         </button>
         <button 
-          onClick={() => setTabActiva('avisos')} 
+          onClick={() => { setTabActiva('avisos'); cancelarEdicion(); }} 
           style={{ background: 'none', border: 'none', fontSize: '1.2rem', fontWeight: tabActiva === 'avisos' ? 'bold' : 'normal', color: tabActiva === 'avisos' ? '#FFC107' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
         >
           🚨 Avisos Importantes
@@ -203,8 +251,14 @@ export default function GestorCalendarioAdmin() {
       {tabActiva === 'oficiales' && (
         <div style={{ animation: 'fadeIn 0.3s' }}>
           <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', marginBottom: '2rem' }}>
-            <h3 style={{ margin: '0 0 1.5rem 0', color: 'var(--accent-blue)' }}>Configurar Calendario Base</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Añade los CTE, días festivos y evaluaciones. Los periodos vacacionales pintarán todos los días seleccionados en la agenda del docente.</p>
+            <h3 style={{ margin: '0 0 1.5rem 0', color: 'var(--accent-blue)' }}>
+              {eventoEditando ? '✏️ Editar Evento Oficial' : 'Configurar Calendario Base'}
+            </h3>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+              {eventoEditando 
+                ? 'Modifica los datos del evento y guarda los cambios.' 
+                : 'Añade los CTE, días festivos y evaluaciones. Los periodos vacacionales pintarán todos los días seleccionados en la agenda del docente.'}
+            </p>
             
             <form onSubmit={guardarFechaOficial} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -246,9 +300,16 @@ export default function GestorCalendarioAdmin() {
                   </div>
                 )}
 
-                <button type="submit" disabled={guardando} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', height: 'fit-content', padding: '0.8rem 2rem' }}>
-                  {guardando ? 'Guardando...' : '➕ Añadir al Calendario'}
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: '150px' }}>
+                  <button type="submit" disabled={guardando} className="pill-btn" style={{ flex: 1, background: 'var(--accent-blue)', color: 'white', height: 'fit-content', padding: '0.8rem 1rem' }}>
+                    {guardando ? 'Guardando...' : (eventoEditando ? '💾 Guardar' : '➕ Añadir')}
+                  </button>
+                  {eventoEditando && (
+                    <button type="button" onClick={cancelarEdicion} className="pill-btn" style={{ flex: 1, background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', height: 'fit-content', padding: '0.8rem 1rem' }}>
+                      Cancelar
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           </div>
@@ -269,7 +330,7 @@ export default function GestorCalendarioAdmin() {
                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay fechas oficiales configuradas.</div>
                 ) : (
                   fechas.map(f => (
-                    <div key={f.id} className="activity-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: 0, borderLeft: `4px solid ${COLORES_OFICIALES[f.tipo]}` }}>
+                    <div key={f.id} className="activity-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: 0, borderLeft: `4px solid ${COLORES_OFICIALES[f.tipo]}`, opacity: eventoEditando === f.id ? 0.5 : 1 }}>
                       <div>
                         <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: COLORES_OFICIALES[f.tipo], textTransform: 'uppercase' }}>{f.tipo}</span>
                         <h4 style={{ margin: '0.2rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{f.titulo}</h4>
@@ -279,7 +340,10 @@ export default function GestorCalendarioAdmin() {
                             : formatearFechaDisplay(f.fecha)}
                         </p>
                       </div>
-                      <button onClick={() => eliminarFechaOficial(f.id)} className="pill-btn" style={{ padding: '0.5rem', background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none' }} title="Eliminar">🗑</button>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={() => iniciarEdicion(f)} className="pill-btn" style={{ padding: '0.5rem', background: 'var(--bg-panel)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }} title="Editar Evento">✏️</button>
+                        <button onClick={() => eliminarFechaOficial(f.id)} className="pill-btn" style={{ padding: '0.5rem', background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none' }} title="Eliminar">🗑</button>
+                      </div>
                     </div>
                   ))
                 )}
