@@ -16,14 +16,16 @@ export default function App() {
   const [session, setSession] = useState<SessionInfo>({ isLoggedIn: false, role: null, user: null });
   const [cargando, setCargando] = useState(true);
   
-  const [vistaAdmin, setVistaAdmin] = useState<'admin' | 'docente'>('admin');
+  // CAMBIO CLAVE 1: Por defecto, todos inician en la vista 'docente'
+  const [vistaAdmin, setVistaAdmin] = useState<'admin' | 'docente'>('docente');
 
   useEffect(() => {
     const sesionGuardada = localStorage.getItem('aulaPlusSession');
     if (sesionGuardada) {
       const data = JSON.parse(sesionGuardada);
       setSession(data);
-      if (data.role === 'admin') setVistaAdmin('admin');
+      // CAMBIO CLAVE 2: Si el admin recarga la página, lo devolvemos a su Dashboard de docente
+      if (data.role === 'admin') setVistaAdmin('docente');
     }
     setCargando(false);
   }, []);
@@ -32,18 +34,14 @@ export default function App() {
     const data = { isLoggedIn: true, role, user };
     localStorage.setItem('aulaPlusSession', JSON.stringify(data));
     setSession(data);
-    if (role === 'admin') setVistaAdmin('admin');
+    // CAMBIO CLAVE 3: Al iniciar sesión como admin, aterriza directo en la vista docente
+    if (role === 'admin') setVistaAdmin('docente');
   };
 
   const handleLogout = async () => {
     try {
-      // 1. Bandera para que Login.tsx sepa que fue un cierre intencional
       sessionStorage.setItem('forzarCierreAulaPlus', 'true');
-      
-      // 2. Cerramos la sesión directamente en los servidores de Google/Firebase
       await signOut(auth);
-      
-      // 3. Limpiamos la memoria local de Aula+
       localStorage.removeItem('aulaPlusSession');
       setSession({ isLoggedIn: false, role: null, user: null });
     } catch (error) {
