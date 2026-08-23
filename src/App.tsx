@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import Login from './components/Login';
 import Dashboard from './pages/Dashboard';
 import SuperAdmin from './pages/SuperAdmin';
-import PizarraAlumno from './pages/PizarraAlumno'; // IMPORTAMOS LA NUEVA PIZARRA
+import PizarraAlumno from './pages/PizarraAlumno';
 import { TutorialProvider } from './context/TutorialContext';
 import { signOut } from 'firebase/auth'; 
 import { auth } from './services/firebase'; 
 
 interface SessionInfo {
   isLoggedIn: boolean;
-  role: 'docente' | 'admin' | 'alumno' | null; // AÑADIDO 'alumno'
+  role: 'docente' | 'admin' | 'alumno' | null; 
   user: any;
 }
 
@@ -21,19 +21,27 @@ export default function App() {
 
   useEffect(() => {
     const sesionGuardada = localStorage.getItem('aulaPlusSession');
+    const sesionAlumno = sessionStorage.getItem('aulaPlusAlumnoSession'); // Recuperamos memoria temporal
+    
     if (sesionGuardada) {
       const data = JSON.parse(sesionGuardada);
       setSession(data);
       if (data.role === 'admin') setVistaAdmin('docente');
+    } else if (sesionAlumno) {
+      const data = JSON.parse(sesionAlumno);
+      setSession(data);
     }
     setCargando(false);
   }, []);
 
   const handleLogin = (role: 'docente' | 'admin' | 'alumno', user: any) => {
     const data = { isLoggedIn: true, role, user };
-    // Guardamos en memoria solo si no es alumno, para que el alumno no se quede logueado por error
+    
     if (role !== 'alumno') {
       localStorage.setItem('aulaPlusSession', JSON.stringify(data));
+    } else {
+      // Guardamos al alumno solo mientras la pestaña esté abierta
+      sessionStorage.setItem('aulaPlusAlumnoSession', JSON.stringify(data));
     }
     setSession(data);
     if (role === 'admin') setVistaAdmin('docente');
@@ -44,14 +52,15 @@ export default function App() {
       sessionStorage.setItem('forzarCierreAulaPlus', 'true');
       await signOut(auth);
       localStorage.removeItem('aulaPlusSession');
+      sessionStorage.removeItem('aulaPlusAlumnoSession');
       setSession({ isLoggedIn: false, role: null, user: null });
     } catch (error) {
       console.error("Error al cerrar sesión:", error);
     }
   };
 
-  // Función exclusiva para que los alumnos regresen al login
   const salirPizarra = () => {
+    sessionStorage.removeItem('aulaPlusAlumnoSession');
     setSession({ isLoggedIn: false, role: null, user: null });
   };
 
@@ -62,7 +71,6 @@ export default function App() {
       {!session.isLoggedIn ? (
         <Login onLogin={handleLogin} />
       ) : session.role === 'alumno' ? (
-        // ENRUTAMIENTO HACIA LA PIZARRA
         <PizarraAlumno onVolver={salirPizarra} />
       ) : session.role === 'admin' && vistaAdmin === 'admin' ? (
         <SuperAdmin onLogout={handleLogout} onSwitchView={() => setVistaAdmin('docente')} />

@@ -22,7 +22,6 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     return JSON.parse(localStorage.getItem('aulaPlus_likes') || '[]');
   });
 
-  // Reloj interno para actualizar la cuenta regresiva cada minuto
   useEffect(() => {
     const int = setInterval(() => setAhora(new Date()), 60000);
     return () => clearInterval(int);
@@ -30,12 +29,20 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
 
   const buscarPizarra = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!codigo.trim()) return;
+    
+    // Limpieza profunda de espacios y autocompletado erróneo
+    let cleanCode = codigo.replace(/\s+/g, '').toUpperCase();
+    if (!cleanCode) return;
+    
+    if (!cleanCode.startsWith('AULA-')) {
+      cleanCode = 'AULA-' + cleanCode;
+    }
+
     setCargando(true);
     setError('');
 
     try {
-      const qGrupo = query(collection(db, 'groups'), where('pizarraCode', '==', codigo.toUpperCase()));
+      const qGrupo = query(collection(db, 'groups'), where('pizarraCode', '==', cleanCode));
       const snapGrupo = await getDocs(qGrupo);
 
       if (snapGrupo.empty) {
@@ -82,20 +89,6 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     setActividades(prev => prev.map(a => a.id === idActividad ? { ...a, likes: a.likes + 1 } : a));
   };
 
-  const generarGoogleCalendarLink = (aviso: EvidenciaPublica) => {
-    const text = encodeURIComponent(`Aviso Escolar: ${aviso.titulo}`);
-    const details = encodeURIComponent(aviso.descripcion);
-    let dates = "";
-    
-    // Convertimos la fecha a formato de Google Calendar (YYYYMMDDTHHMMSSZ)
-    if (aviso.fechaActividad) {
-       const startStr = new Date(aviso.fechaActividad).toISOString().replace(/-|:|\.\d\d\d/g, "");
-       const endStr = aviso.fechaFinAviso ? new Date(aviso.fechaFinAviso).toISOString().replace(/-|:|\.\d\d\d/g, "") : startStr;
-       dates = `&dates=${startStr}/${endStr}`;
-    }
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&details=${details}${dates}`;
-  };
-
   const calcularTiempoRestante = (fechaFin: string) => {
     if (!fechaFin) return null;
     const target = new Date(fechaFin);
@@ -119,17 +112,21 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
         <div style={{ background: 'white', padding: '2.5rem', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
           <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🎓</div>
           <h1 style={{ margin: '0 0 0.5rem 0', color: '#1C51FF' }}>Pizarra Alumno</h1>
-          <p style={{ color: '#666', marginBottom: '2rem' }}>Ingresa el código que te proporcionó tu maestro para ver tus actividades.</p>
+          <p style={{ color: '#666', marginBottom: '2rem' }}>Ingresa el código de 4 dígitos que te dio el profesor.</p>
 
           <form onSubmit={buscarPizarra} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <input 
-              type="text" 
-              placeholder="Ej. AULA-XYZ" 
-              value={codigo} 
-              onChange={e => setCodigo(e.target.value.toUpperCase())}
-              style={{ padding: '1rem', fontSize: '1.2rem', textAlign: 'center', borderRadius: '12px', border: '2px solid #ccc', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: 'bold' }}
-              required 
-            />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{ position: 'absolute', left: '15px', color: '#1C51FF', fontWeight: 'bold', fontSize: '1.2rem' }}>AULA-</span>
+              <input 
+                type="text" 
+                placeholder="XYZW" 
+                value={codigo.replace(/^AULA-/i, '').replace(/\s+/g, '')} 
+                onChange={e => setCodigo(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+                style={{ width: '100%', padding: '1rem 1rem 1rem 5.5rem', fontSize: '1.2rem', textAlign: 'left', borderRadius: '12px', border: '2px solid #ccc', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: 'bold' }}
+                required 
+                maxLength={10}
+              />
+            </div>
             {error && <span style={{ color: 'red', fontSize: '0.9rem', fontWeight: 'bold' }}>{error}</span>}
             <button type="submit" disabled={cargando} style={{ padding: '1rem', borderRadius: '12px', border: 'none', backgroundColor: '#1C51FF', color: 'white', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer' }}>
               {cargando ? 'Buscando...' : 'Entrar a mi Pizarra'}
@@ -140,13 +137,20 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     );
   }
 
-  const avisosGenerales = actividades.filter(a => a.tipo === 'Aviso');
+  // Filtramos los avisos para NO mostrar los expirados
+  const avisosGenerales = actividades.filter(a => {
+    if (a.tipo !== 'Aviso') return false;
+    if (a.fechaFinAviso) {
+       const target = new Date(a.fechaFinAviso).getTime();
+       if (target <= ahora.getTime()) return false; 
+    }
+    return true;
+  });
+
   const actividadesTrimestre = actividades.filter(a => a.trimestre === trimestreActivo && a.tipo !== 'Aviso');
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', paddingBottom: '3rem', animation: 'fadeIn 0.4s' }}>
-      
-      {/* MAGIA CSS: Animación para el brillo dorado de los avisos */}
       <style>{`
         @keyframes pulseGlow {
           0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
@@ -155,11 +159,9 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
         }
       `}</style>
 
-      {/* HEADER DE LA PIZARRA */}
       <header style={{ backgroundColor: '#1C51FF', color: 'white', padding: '2rem 1rem', textAlign: 'center', borderBottomLeftRadius: '30px', borderBottomRightRadius: '30px', boxShadow: '0 4px 20px rgba(28, 81, 255, 0.3)', position: 'relative' }}>
         <button onClick={() => setGrupoData(null)} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>← Salir</button>
         
-        {/* CAMPANITA DE AVISOS */}
         {avisosGenerales.length > 0 && (
           <div style={{ position: 'absolute', top: '20px', right: '20px', fontSize: '1.5rem', animation: 'pulseGlow 2s infinite', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             🔔
@@ -176,12 +178,10 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
 
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '0 1rem' }}>
         
-        {/* SECCIÓN DE AVISOS DORADOS */}
         {avisosGenerales.length > 0 && (
           <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {avisosGenerales.map(aviso => {
               const tiempoRestante = calcularTiempoRestante(aviso.fechaFinAviso || '');
-              const expirado = tiempoRestante === 'Expirado';
 
               return (
                 <div key={aviso.id} style={{ backgroundColor: '#fffdf5', borderRadius: '20px', padding: '1.5rem', border: '2px solid #FFC107', boxShadow: '0 8px 25px rgba(255, 193, 7, 0.2)', position: 'relative', overflow: 'hidden' }}>
@@ -190,8 +190,8 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
                       🔔 AVISO IMPORTANTE
                     </span>
                     {aviso.fechaFinAviso && (
-                      <span style={{ fontSize: '0.9rem', color: expirado ? '#E91E63' : '#b28000', fontWeight: 'bold', backgroundColor: expirado ? 'rgba(233, 30, 99, 0.1)' : 'rgba(255, 193, 7, 0.2)', padding: '4px 10px', borderRadius: '8px' }}>
-                        {expirado ? 'Vencido' : `⏳ ${tiempoRestante}`}
+                      <span style={{ fontSize: '0.9rem', color: '#b28000', fontWeight: 'bold', backgroundColor: 'rgba(255, 193, 7, 0.2)', padding: '4px 10px', borderRadius: '8px' }}>
+                        ⏳ {tiempoRestante}
                       </span>
                     )}
                   </div>
@@ -201,15 +201,6 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,193,7,0.3)', paddingTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                     <span style={{ fontSize: '0.85rem', color: '#888', fontWeight: 'bold' }}>Emitido: {aviso.fechaActividad}</span>
-                    
-                    <a 
-                      href={generarGoogleCalendarLink(aviso)} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      style={{ padding: '0.6rem 1.2rem', borderRadius: '12px', backgroundColor: '#fff', border: '1px solid #FFC107', color: '#b28000', fontWeight: 'bold', textDecoration: 'none', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px' }}
-                    >
-                      📅 Añadir a mi Calendario
-                    </a>
                   </div>
                 </div>
               );
@@ -217,7 +208,6 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
           </div>
         )}
 
-        {/* TABS TRIMESTRES */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '2rem', marginBottom: '2rem' }}>
           {['1', '2', '3'].map(t => (
             <button 
@@ -229,7 +219,6 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
           ))}
         </div>
 
-        {/* FEED DE ACTIVIDADES NORMALES */}
         {actividadesTrimestre.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#888', background: 'white', borderRadius: '20px', border: '2px dashed #ccc' }}>
             <span style={{ fontSize: '3rem' }}>📭</span>
