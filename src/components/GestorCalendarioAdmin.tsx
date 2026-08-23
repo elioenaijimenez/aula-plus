@@ -3,26 +3,31 @@ import { collection, query, getDocs, doc, setDoc, deleteDoc } from 'firebase/fir
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 
-interface FechaOficial {
+export interface FechaOficial {
   id: string;
   fecha: string; // Formato YYYY-MM-DD
+  fechaFin?: string; // Opcional para periodos
   titulo: string;
-  tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga';
+  tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga' | 'Vacaciones';
 }
 
-const COLORES_OFICIALES = {
+export const COLORES_OFICIALES = {
   CTE: '#E91E63', // Rosa vibrante
-  Festivo: '#757575', // Gris (Suspensión de labores)
-  Evaluacion: '#FF9800', // Naranja (Entrega de boletas)
+  Festivo: '#757575', // Gris (Suspensión)
+  Vacaciones: '#00BCD4', // Morado/Cian
+  Evaluacion: '#FF9800', // Naranja
   InicioFin: '#4CAF50', // Verde
-  Descarga: '#9C27B0' // Morado
+  Descarga: '#9C27B0' // Morado oscuro
 };
 
 export default function GestorCalendarioAdmin() {
   const [fechas, setFechas] = useState<FechaOficial[]>([]);
   const [cargando, setCargando] = useState(true);
   
+  const [tipoDuracion, setTipoDuracion] = useState<'dia' | 'periodo'>('dia');
   const [nuevaFecha, setNuevaFecha] = useState('');
+  const [nuevaFechaFin, setNuevaFechaFin] = useState('');
+  
   const [nuevoTitulo, setNuevoTitulo] = useState('');
   const [nuevoTipo, setNuevoTipo] = useState<FechaOficial['tipo']>('Festivo');
   const [guardando, setGuardando] = useState(false);
@@ -52,32 +57,35 @@ export default function GestorCalendarioAdmin() {
   const guardarFecha = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevaFecha || !nuevoTitulo) return;
+    if (tipoDuracion === 'periodo' && !nuevaFechaFin) return alert('Debes seleccionar una fecha de fin.');
+    if (tipoDuracion === 'periodo' && nuevaFechaFin < nuevaFecha) return alert('La fecha de fin no puede ser anterior a la de inicio.');
     
     setGuardando(true);
     try {
-      // Usamos la misma fecha como ID para que sea fácil de buscar y no se dupliquen
-      const docRef = doc(db, 'calendario_oficial', nuevaFecha);
+      // ID único basado en el tiempo para evitar sobrescribir si hay múltiples eventos el mismo día
+      const idUnico = `evt_${Date.now()}`;
+      const docRef = doc(db, 'calendario_oficial', idUnico);
+      
       const dataFecha: Omit<FechaOficial, 'id'> = {
         fecha: nuevaFecha,
         titulo: nuevoTitulo,
         tipo: nuevoTipo
       };
       
+      if (tipoDuracion === 'periodo') {
+        dataFecha.fechaFin = nuevaFechaFin;
+      }
+      
       await setDoc(docRef, dataFecha);
       
-      // Actualizamos estado local
-      const existe = fechas.find(f => f.id === nuevaFecha);
-      let nuevaLista;
-      if (existe) {
-        nuevaLista = fechas.map(f => f.id === nuevaFecha ? { id: nuevaFecha, ...dataFecha } : f);
-      } else {
-        nuevaLista = [...fechas, { id: nuevaFecha, ...dataFecha }];
-      }
+      const nuevaLista = [...fechas, { id: idUnico, ...dataFecha }];
       nuevaLista.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
       
       setFechas(nuevaLista);
       setNuevoTitulo('');
       setNuevaFecha('');
+      setNuevaFechaFin('');
+      setTipoDuracion('dia');
     } catch (error) {
       alert("Error al guardar la fecha oficial.");
     }
@@ -96,11 +104,10 @@ export default function GestorCalendarioAdmin() {
   };
 
   const borrarTodoElCalendario = async () => {
-    const confirmacion = window.prompt("⚠️ ATENCIÓN: Estás a punto de borrar TODO el calendario oficial (ideal para el cambio de ciclo escolar). Escribe 'BORRAR' para confirmar.");
+    const confirmacion = window.prompt("⚠️ ATENCIÓN: Estás a punto de borrar TODO el calendario oficial. Escribe 'BORRAR' para confirmar.");
     if (confirmacion === 'BORRAR') {
       setCargando(true);
       try {
-        // Borramos uno por uno (en Firebase no hay un "drop table")
         for (const fecha of fechas) {
           await deleteDoc(doc(db, 'calendario_oficial', fecha.id));
         }
@@ -113,37 +120,65 @@ export default function GestorCalendarioAdmin() {
     }
   };
 
+  const formatearFechaDisplay = (fecha: string) => {
+    const [year, month, day] = fecha.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', marginBottom: '2rem' }}>
         <h3 style={{ margin: '0 0 1.5rem 0', color: 'var(--accent-blue)' }}>📅 Configurar Días Oficiales</h3>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Añade los CTE, días festivos y evaluaciones. Estos días aparecerán marcados en el calendario de todos los docentes.</p>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Añade los CTE, días festivos y evaluaciones. Los periodos vacacionales pintarán todos los días seleccionados en la agenda del docente.</p>
         
-        <form onSubmit={guardarFecha} style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1, minWidth: '150px' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Fecha</label>
-            <input type="date" required value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} className="search-input" />
-          </div>
+        <form onSubmit={guardarFecha} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
-          <div style={{ flex: 2, minWidth: '200px' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Título del Evento</label>
-            <input type="text" required placeholder="Ej. Consejo Técnico Escolar" value={nuevoTitulo} onChange={e => setNuevoTitulo(e.target.value)} className="search-input" />
+          {/* Fila 1: Tipo y Título */}
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Clasificación</label>
+              <select value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value as any)} className="search-input" style={{ borderLeft: `4px solid ${COLORES_OFICIALES[nuevoTipo]}` }}>
+                <option value="Festivo">Festivo / Suspensión</option>
+                <option value="Vacaciones">Receso / Vacaciones</option>
+                <option value="CTE">CTE / Fase Intensiva</option>
+                <option value="Evaluacion">Evaluación / Boletas</option>
+                <option value="Descarga">Descarga Administrativa</option>
+                <option value="InicioFin">Inicio / Fin de Clases</option>
+              </select>
+            </div>
+            <div style={{ flex: 2, minWidth: '200px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Título del Evento Oficial</label>
+              <input type="text" required placeholder="Ej. Consejo Técnico Escolar - Fase Intensiva" value={nuevoTitulo} onChange={e => setNuevoTitulo(e.target.value)} className="search-input" />
+            </div>
           </div>
 
-          <div style={{ flex: 1, minWidth: '150px' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Tipo de Día</label>
-            <select value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value as any)} className="search-input" style={{ borderLeft: `4px solid ${COLORES_OFICIALES[nuevoTipo]}` }}>
-              <option value="Festivo">Festivo / Suspensión</option>
-              <option value="CTE">CTE / Fase Intensiva</option>
-              <option value="Evaluacion">Evaluación / Calificaciones</option>
-              <option value="Descarga">Descarga Administrativa</option>
-              <option value="InicioFin">Inicio / Fin de Clases</option>
-            </select>
+          {/* Fila 2: Fechas y Botón */}
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Duración del Evento</label>
+              <select value={tipoDuracion} onChange={e => setTipoDuracion(e.target.value as any)} className="search-input">
+                <option value="dia">Un solo día</option>
+                <option value="periodo">Periodo (Rango de fechas)</option>
+              </select>
+            </div>
+
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>{tipoDuracion === 'periodo' ? 'Fecha de Inicio' : 'Fecha'}</label>
+              <input type="date" required value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} className="search-input" />
+            </div>
+
+            {tipoDuracion === 'periodo' && (
+              <div style={{ flex: 1, minWidth: '150px', animation: 'fadeIn 0.2s' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Fecha de Fin</label>
+                <input type="date" required value={nuevaFechaFin} onChange={e => setNuevaFechaFin(e.target.value)} className="search-input" />
+              </div>
+            )}
+
+            <button type="submit" disabled={guardando} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', height: 'fit-content', padding: '0.8rem 2rem' }}>
+              {guardando ? 'Guardando...' : '➕ Añadir al Calendario'}
+            </button>
           </div>
 
-          <button type="submit" disabled={guardando} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', height: 'fit-content', padding: '0.8rem 2rem' }}>
-            {guardando ? 'Guardando...' : '➕ Añadir Día'}
-          </button>
         </form>
       </div>
 
@@ -158,7 +193,7 @@ export default function GestorCalendarioAdmin() {
         </div>
 
         {cargando ? <div className="loader"></div> : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
             {fechas.length === 0 ? (
                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay fechas oficiales configuradas.</div>
             ) : (
@@ -167,7 +202,11 @@ export default function GestorCalendarioAdmin() {
                   <div>
                     <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: COLORES_OFICIALES[f.tipo], textTransform: 'uppercase' }}>{f.tipo}</span>
                     <h4 style={{ margin: '0.2rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{f.titulo}</h4>
-                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>{new Date(f.fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      {f.fechaFin 
+                        ? `${formatearFechaDisplay(f.fecha)} al ${formatearFechaDisplay(f.fechaFin)}`
+                        : formatearFechaDisplay(f.fecha)}
+                    </p>
                   </div>
                   <button onClick={() => eliminarFecha(f.id)} className="pill-btn" style={{ padding: '0.5rem', background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none' }} title="Eliminar">🗑</button>
                 </div>

@@ -7,8 +7,9 @@ import TutorialTooltip from './TutorialTooltip';
 interface EventoOficial {
   id: string;
   fecha: string;
+  fechaFin?: string;
   titulo: string;
-  tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga';
+  tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga' | 'Vacaciones';
 }
 
 interface NotaPersonal {
@@ -22,6 +23,7 @@ interface NotaPersonal {
 const COLORES_OFICIALES = {
   CTE: '#E91E63',
   Festivo: '#757575',
+  Vacaciones: '#00BCD4',
   Evaluacion: '#FF9800',
   InicioFin: '#4CAF50',
   Descarga: '#9C27B0'
@@ -58,7 +60,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     const email = sessionData?.user?.email || sessionData?.email || '';
     setUserEmail(email);
 
-    // 1. Sincronización en Tiempo Real: Eventos Oficiales (SuperAdmin)
+    // 1. Sincronización en Tiempo Real: Eventos Oficiales
     const qOficiales = query(collection(db, 'calendario_oficial'));
     const unsubOficiales = onSnapshot(qOficiales, (snapshot) => {
       const lista: EventoOficial[] = [];
@@ -66,7 +68,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
       setEventosOficiales(lista);
     });
 
-    // 2. Sincronización en Tiempo Real: Notas Privadas del Docente
+    // 2. Sincronización en Tiempo Real: Notas Privadas
     if (email) {
       const qNotas = query(collection(db, 'teacher_notes_calendar'), where('docenteEmail', '==', email));
       const unsubNotas = onSnapshot(qNotas, (snapshot) => {
@@ -84,6 +86,16 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     return () => unsubOficiales();
   }, []);
 
+  // Función para obtener la fecha local estricta (evita el desfase por zona horaria)
+  const obtenerFechaLocalString = (fecha: Date) => {
+    // Formato YYYY-MM-DD forzado a la zona horaria del dispositivo
+    const offset = fecha.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(fecha.getTime() - offset)).toISOString().split('T')[0];
+    return localISOTime;
+  };
+
+  const hoyLocalString = obtenerFechaLocalString(new Date());
+
   // Lógica del Calendario
   const obtenerDiasDelMes = (año: number, mes: number) => new Date(año, mes + 1, 0).getDate();
   const obtenerPrimerDiaDelMes = (año: number, mes: number) => new Date(año, mes, 1).getDay();
@@ -95,16 +107,14 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
 
   const cambiarMes = (incremento: number) => {
     setFechaActual(new Date(añoActual, mesActual + incremento, 1));
-    setDiaSeleccionado('');
   };
 
   const seleccionarDiaParaNota = (fechaAString: string) => {
     setDiaSeleccionado(fechaAString);
-    setTextoNota('');
-    // En móviles, hacer scroll suave al formulario si está abajo
+    setTextoNota(''); // Limpia el form al tocar otro día
     if (window.innerWidth < 768) {
       setTimeout(() => {
-        document.getElementById('panel-postit')?.scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('panel-detalles')?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     }
   };
@@ -123,7 +133,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
         createdAt: serverTimestamp()
       });
       setTextoNota('');
-      // No necesitamos actualizar el estado manual, onSnapshot lo hará al instante
+      setDiaSeleccionado(''); // Desactiva el form obligando a tocar otra fecha
     } catch (error) {
       alert("Error al guardar la nota.");
     }
@@ -134,6 +144,17 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     if (window.confirm("¿Borrar este Post-it?")) {
       await deleteDoc(doc(db, 'teacher_notes_calendar', id));
     }
+  };
+
+  // Función para determinar si una fecha iterada cae dentro de un periodo oficial
+  const verificarEventosDelDia = (fechaIteracion: string) => {
+    return eventosOficiales.filter(evento => {
+      if (!evento.fechaFin) {
+        return evento.fecha === fechaIteracion; // Evento de un solo día
+      } else {
+        return fechaIteracion >= evento.fecha && fechaIteracion <= evento.fechaFin; // Dentro del rango
+      }
+    });
   };
 
   // Generar celdas del calendario
@@ -147,47 +168,50 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     const diaStr = d.toString().padStart(2, '0');
     const fechaIteracion = `${añoActual}-${mesStr}-${diaStr}`;
     
-    // Buscar si hay eventos o notas este día
-    const eventoOficial = eventosOficiales.find(e => e.fecha === fechaIteracion);
+    const eventosDelDia = verificarEventosDelDia(fechaIteracion);
     const notasDelDia = notasPersonales.filter(n => n.fecha === fechaIteracion);
     
-    const esHoy = new Date().toISOString().split('T')[0] === fechaIteracion;
+    const esHoy = hoyLocalString === fechaIteracion;
     const estaSeleccionado = diaSeleccionado === fechaIteracion;
+    
+    // Si hay varios eventos oficiales (rara vez), tomamos el primero para el color principal
+    const eventoPrincipal = eventosDelDia.length > 0 ? eventosDelDia[0] : null;
 
     celdas.push(
       <div 
         key={d} 
-        className={`cal-cell ${estaSeleccionado ? 'selected' : ''} ${esHoy ? 'today' : ''}`}
+        className={`cal-cell ${estaSeleccionado ? 'selected' : ''}`}
         onClick={() => seleccionarDiaParaNota(fechaIteracion)}
         style={{ 
-          backgroundColor: notasDelDia.length > 0 ? `${notasDelDia[0].color}1A` : 'transparent', // Fondo súper tenue si hay nota personal
+          backgroundColor: notasDelDia.length > 0 ? `${notasDelDia[0].color}15` : (eventoPrincipal?.tipo === 'Vacaciones' ? `${COLORES_OFICIALES.Vacaciones}15` : 'transparent'),
           border: estaSeleccionado ? '2px solid var(--accent-blue)' : '1px solid #e0e0e0',
-          borderTop: eventoOficial ? `4px solid ${COLORES_OFICIALES[eventoOficial.tipo]}` : '1px solid #e0e0e0'
+          borderTop: eventoPrincipal ? `4px solid ${COLORES_OFICIALES[eventoPrincipal.tipo]}` : '1px solid #e0e0e0'
         }}
       >
-        <span className="cal-number" style={{ color: esHoy ? 'var(--accent-blue)' : '#333', fontWeight: esHoy ? 'bold' : 'normal' }}>{d}</span>
+        <span className="cal-number" style={{ 
+          color: esHoy ? 'white' : '#333', 
+          backgroundColor: esHoy ? 'var(--accent-blue)' : 'transparent',
+          borderRadius: esHoy ? '50%' : '0',
+          width: esHoy ? '28px' : 'auto',
+          height: esHoy ? '28px' : 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          {d}
+        </span>
         
-        {/* Indicadores Visuales */}
         <div className="cal-indicators">
-          {eventoOficial && (
-            <div className="cal-badge official" style={{ backgroundColor: COLORES_OFICIALES[eventoOficial.tipo] }}>
-              {eventoOficial.tipo}
+          {eventoPrincipal && (
+            <div className="cal-badge official" style={{ backgroundColor: COLORES_OFICIALES[eventoPrincipal.tipo] }}>
+              {eventoPrincipal.tipo}
             </div>
           )}
           
-          {/* Tooltip personalizado de Notas */}
           {notasDelDia.length > 0 && (
             <div className="cal-notes-wrapper">
               {notasDelDia.map(n => (
-                <div key={n.id} className="cal-note-dot tooltip-container" style={{ backgroundColor: n.color }}>
-                  <div className="tooltip-postit" style={{ backgroundColor: n.color, color: '#000' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                      <b>📌 Post-it</b>
-                      <span onClick={(e) => { e.stopPropagation(); borrarNota(n.id); }} style={{ cursor: 'pointer', fontWeight: 'bold' }}>✕</span>
-                    </div>
-                    {n.texto}
-                  </div>
-                </div>
+                <div key={n.id} className="cal-note-dot" style={{ backgroundColor: n.color }} title="Tienes un post-it aquí"></div>
               ))}
             </div>
           )}
@@ -196,13 +220,18 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     );
   }
 
+  // Datos para el panel de detalles lateral
+  const eventosSeleccionados = diaSeleccionado ? verificarEventosDelDia(diaSeleccionado) : [];
+  const notasSeleccionadas = diaSeleccionado ? notasPersonales.filter(n => n.fecha === diaSeleccionado) : [];
+
+  const formatoFechaPanel = diaSeleccionado ? new Date(diaSeleccionado + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Selecciona un día';
+
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
       
-      {/* MAGIA CSS: Estilos encapsulados para el calendario claro y responsivo */}
       <style>{`
         .calendar-container {
-          background-color: #F8F9FA; /* Blanco suave anti-reflejo */
+          background-color: #F8F9FA;
           border-radius: 16px;
           padding: 1.5rem;
           color: #333;
@@ -232,11 +261,17 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           flex-direction: column;
         }
         .cal-cell:hover:not(.empty) {
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
           transform: translateY(-2px);
+          z-index: 10;
+        }
+        .cal-cell.selected {
+          transform: scale(1.02);
+          box-shadow: 0 4px 15px rgba(28, 81, 255, 0.3);
+          z-index: 11;
         }
         .cal-cell.empty { background: transparent; border: none; cursor: default; }
-        .cal-number { font-size: 1.1rem; align-self: flex-end; margin-bottom: 0.3rem; }
+        .cal-number { font-size: 1.1rem; align-self: flex-end; margin-bottom: 0.3rem; font-weight: 600; }
         .cal-indicators { display: flex; flex-direction: column; gap: 4px; flex: 1; }
         .cal-badge.official {
           color: white;
@@ -255,48 +290,22 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           height: 14px;
           border-radius: 50%;
           box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-          position: relative;
-        }
-        /* Tooltip del Post-it */
-        .tooltip-container .tooltip-postit {
-          visibility: hidden;
-          opacity: 0;
-          position: absolute;
-          bottom: 150%;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 200px;
-          padding: 0.8rem;
-          border-radius: 8px;
-          box-shadow: 2px 4px 15px rgba(0,0,0,0.3);
-          font-size: 0.85rem;
-          z-index: 100;
-          transition: opacity 0.2s;
-        }
-        .tooltip-container:hover .tooltip-postit { visibility: visible; opacity: 1; }
-        /* Flecha del tooltip */
-        .tooltip-container .tooltip-postit::after {
-          content: "";
-          position: absolute;
-          top: 100%;
-          left: 50%;
-          margin-left: -8px;
-          border-width: 8px;
-          border-style: solid;
-          border-color: inherit transparent transparent transparent;
         }
 
-        /* Layout Responsivo */
+        /* Layout Responsivo: Primero Calendario, Luego Panel (en móviles) */
         .agenda-layout {
           display: grid;
-          grid-template-columns: 320px 1fr;
+          grid-template-columns: 1fr 320px;
           gap: 1.5rem;
           align-items: start;
         }
         @media (max-width: 900px) {
-          .agenda-layout { grid-template-columns: 1fr; }
-          .cal-cell { min-height: 70px; }
+          .agenda-layout { 
+            grid-template-columns: 1fr; 
+          }
+          .cal-cell { min-height: 70px; padding: 0.3rem; }
           .cal-badge.official { font-size: 0.55rem; }
+          .cal-number { font-size: 1rem; }
         }
       `}</style>
 
@@ -311,68 +320,16 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
 
       <div className="agenda-layout">
         
-        {/* PANEL IZQUIERDO: POST-ITS (Fijo en escritorio) */}
-        <aside id="panel-postit" style={{ position: 'sticky', top: '2rem' }}>
-          <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-            <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)' }}>📌 Crear Anotación</h4>
-            
-            <TutorialTooltip mensaje="Toca un día en el calendario de la derecha y luego escribe tu nota aquí. Aparecerá como un post-it." posicion="bottom">
-              <form onSubmit={guardarNota} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Día seleccionado:</label>
-                  <input type="date" required value={diaSeleccionado} onChange={e => setDiaSeleccionado(e.target.value)} className="search-input" style={{ width: '100%' }} />
-                </div>
-                
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Nota para este día:</label>
-                  <textarea required value={textoNota} onChange={e => setTextoNota(e.target.value)} className="search-input" style={{ resize: 'vertical', minHeight: '80px', width: '100%', backgroundColor: colorNota, color: '#000' }} placeholder="Escribe un recordatorio..."></textarea>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Color del Post-it:</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {COLORES_NOTAS.map(c => (
-                      <button 
-                        key={c.hex} 
-                        type="button" 
-                        onClick={() => setColorNota(c.hex)}
-                        style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: c.hex, border: colorNota === c.hex ? '3px solid white' : 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
-                        title={c.nombre}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <button type="submit" disabled={guardando || !diaSeleccionado} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', marginTop: '0.5rem' }}>
-                  {guardando ? 'Guardando...' : 'Pegar Post-it'}
-                </button>
-              </form>
-            </TutorialTooltip>
-          </div>
-
-          {/* LEYENDA OFICIAL */}
-          <div style={{ marginTop: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-            <h5 style={{ margin: '0 0 0.8rem 0', color: 'var(--text-muted)' }}>Simbología Oficial</h5>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-main)' }}>
-              {Object.entries(COLORES_OFICIALES).map(([tipo, color]) => (
-                <div key={tipo} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ width: '12px', height: '12px', backgroundColor: color, borderRadius: '3px' }}></div>
-                  {tipo}
-                </div>
-              ))}
-            </div>
-          </div>
-        </aside>
-
-        {/* PANEL DERECHO: CALENDARIO BLANCO (ESTILO APP) */}
+        {/* PANEL PRINCIPAL: CALENDARIO */}
         <section className="calendar-container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
             <h2 style={{ margin: 0, fontSize: '1.5rem', textTransform: 'capitalize' }}>
               {MESES[mesActual]} {añoActual}
             </h2>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => cambiarMes(-1)} className="pill-btn" style={{ background: '#eee', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>◀ Mes Ant.</button>
-              <button onClick={() => cambiarMes(1)} className="pill-btn" style={{ background: '#eee', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>Sig. Mes ▶</button>
+              <button onClick={() => cambiarMes(-1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>◀ Mes Ant.</button>
+              <button onClick={() => setFechaActual(new Date())} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', border: 'none', padding: '0.5rem 1rem' }}>Hoy</button>
+              <button onClick={() => cambiarMes(1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>Sig. Mes ▶</button>
             </div>
           </div>
 
@@ -383,6 +340,94 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
             {celdas}
           </div>
         </section>
+
+        {/* PANEL LATERAL: DETALLES DEL DÍA Y POST-ITS */}
+        <aside id="panel-detalles" style={{ position: 'sticky', top: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)', animation: 'fadeIn 0.2s' }}>
+            <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
+              {diaSeleccionado ? formatoFechaPanel : 'Panel de Detalles'}
+            </h4>
+            
+            {!diaSeleccionado ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
+                👆 Toca un día en el calendario para ver sus eventos o agregar una nota.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                
+                {/* Eventos Oficiales del Día */}
+                {eventosSeleccionados.map(evt => (
+                  <div key={evt.id} style={{ padding: '0.8rem', backgroundColor: 'var(--bg-input)', borderRadius: '8px', borderLeft: `4px solid ${COLORES_OFICIALES[evt.tipo]}` }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: COLORES_OFICIALES[evt.tipo] }}>OFICIAL: {evt.tipo}</span>
+                    <p style={{ margin: '0.3rem 0 0 0', color: 'var(--text-main)', fontSize: '0.9rem' }}>{evt.titulo}</p>
+                  </div>
+                ))}
+
+                {/* Notas Personales del Día */}
+                {notasSeleccionadas.map(nota => (
+                  <div key={nota.id} style={{ padding: '0.8rem', backgroundColor: nota.color, borderRadius: '8px', color: '#000', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.7 }}>📌 MI POST-IT</span>
+                      <button onClick={() => borrarNota(nota.id)} style={{ background: 'none', border: 'none', color: '#000', cursor: 'pointer', fontWeight: 'bold', padding: 0 }} title="Borrar">✕</button>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{nota.texto}</p>
+                  </div>
+                ))}
+
+                {eventosSeleccionados.length === 0 && notasSeleccionadas.length === 0 && (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, fontStyle: 'italic' }}>El día está libre.</p>
+                )}
+
+                <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '0.5rem 0' }} />
+
+                {/* Formulario de Nueva Nota */}
+                <form onSubmit={guardarNota} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Añadir recordatorio:</label>
+                  <textarea 
+                    required 
+                    value={textoNota} 
+                    onChange={e => setTextoNota(e.target.value)} 
+                    className="search-input" 
+                    style={{ resize: 'vertical', minHeight: '80px', width: '100%', backgroundColor: colorNota, color: '#000', border: 'none' }} 
+                    placeholder="Escribe aquí..."
+                  ></textarea>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {COLORES_NOTAS.map(c => (
+                        <button 
+                          key={c.hex} 
+                          type="button" 
+                          onClick={() => setColorNota(c.hex)}
+                          style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: c.hex, border: colorNota === c.hex ? '2px solid white' : 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
+                          title={c.nombre}
+                        />
+                      ))}
+                    </div>
+                    <button type="submit" disabled={guardando} className="pill-btn" style={{ background: '#333', color: 'white', padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                      {guardando ? '...' : 'Guardar'}
+                    </button>
+                  </div>
+                </form>
+
+              </div>
+            )}
+          </div>
+
+          {/* Leyenda Oficial para Referencia Rápida */}
+          <div style={{ backgroundColor: 'var(--bg-input)', padding: '1.2rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+            <h5 style={{ margin: '0 0 0.8rem 0', color: 'var(--text-muted)' }}>Simbología Oficial</h5>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem', fontSize: '0.8rem', color: 'var(--text-main)' }}>
+              {Object.entries(COLORES_OFICIALES).map(([tipo, color]) => (
+                <div key={tipo} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: '45%' }}>
+                  <div style={{ width: '10px', height: '10px', backgroundColor: color, borderRadius: '2px' }}></div>
+                  {tipo}
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
 
       </div>
     </div>
