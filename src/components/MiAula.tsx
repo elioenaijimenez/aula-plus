@@ -2,13 +2,12 @@ import { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc, getDocs, where, orderBy, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import CalificarEvidencia from './CalificarEvidencia';
-import TutorialTooltip from './TutorialTooltip';
 
 interface Evidencia { 
   id: string; titulo: string; descripcion: string; tipo: string;
   enlaceDrive: string; publicada: boolean; vistas: number; likes: number;
   puntajeMinimo?: number; puntajeMaximo?: number; fechaActividad: string; 
-  fechaFinAviso?: string; // NUEVO CAMPO PARA AVISOS
+  fechaFinAviso?: string; 
   trimestre?: string; numero?: number; createdAt?: any; calificaciones?: Record<string, number>; 
 }
 
@@ -92,7 +91,7 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
   
   const obtenerFechaLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().split('T')[0]; };
   const [fechaActividad, setFechaActividad] = useState(obtenerFechaLocal());
-  const [fechaFinAviso, setFechaFinAviso] = useState(''); // NUEVO: Fecha y hora de caducidad para avisos
+  const [fechaFinAviso, setFechaFinAviso] = useState('');
 
   const [recursosGlobales, setRecursosGlobales] = useState<Recurso[]>([]);
   const [misRecursos, setMisRecursos] = useState<Recurso[]>([]);
@@ -130,7 +129,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
         if (comp === 0) return (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0) - (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0);
         return comp;
       });
-      // Separamos el contador para actividades y avisos
       let counter = 1;
       const procesadas = lista.map(ev => {
         if (ev.tipo === 'Aviso') return ev;
@@ -200,7 +198,7 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
     
     if (tipoFinal === 'Aviso') {
       datosEvidencia.fechaFinAviso = fechaFinAviso;
-      datosEvidencia.trimestre = 'Avisos'; // Los aislamos de los trimestres normales
+      datosEvidencia.trimestre = 'Avisos'; 
     } else {
       if (Number(puntajeMin) >= Number(puntajeMax)) { alert("El máximo debe ser mayor al mínimo."); setGuardando(false); return; }
       datosEvidencia.puntajeMinimo = Number(puntajeMin);
@@ -301,7 +299,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
               <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Fecha Inicial</label>
               <input type="date" className="search-input" required value={fechaActividad} onChange={e => setFechaActividad(e.target.value)} />
             </div>
-            {/* Si es AVISO, mostramos la fecha de caducidad */}
             {tipo === 'Aviso' && (
               <div style={{ flex: 1, minWidth: '150px', animation: 'fadeIn 0.3s' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--accent-yellow)', fontWeight: 'bold' }}>Caducidad (Opcional)</label>
@@ -321,7 +318,6 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
             <input type="url" className="search-input" value={enlaceDrive} onChange={e => setEnlaceDrive(e.target.value)} placeholder="https://drive.google.com/file/d/..." />
           </div>
 
-          {/* Ocultamos las calificaciones si es un AVISO */}
           {tipo !== 'Aviso' && (
             <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '1.5rem', borderRadius: '16px', animation: 'fadeIn 0.3s' }}>
               <div style={{ flex: 1, minWidth: '150px' }}><label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Trimestre</label><select className="search-input" value={trimestre} onChange={e => setTrimestre(e.target.value)}><option value="1">Trimestre 1</option><option value="2">Trimestre 2</option><option value="3">Trimestre 3</option></select></div>
