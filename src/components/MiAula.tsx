@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TabGestorActividades from './TabGestorActividades';
@@ -32,17 +32,7 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
 
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
-      <style>{`
-        .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0;}
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--accent-green); }
-        input:checked + .slider:before { transform: translateX(18px); }
-        .biblioteca-card { transition: all 0.3s ease; border: 1px solid var(--border-color); }
-        .biblioteca-card:hover { box-shadow: 0 4px 20px var(--glow-color-shadow); border-color: var(--glow-color-border); transform: translateY(-3px); }
-      `}</style>
-
+      
       {/* HEADER MI AULA */}
       <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
