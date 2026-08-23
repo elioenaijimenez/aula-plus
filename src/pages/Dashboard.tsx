@@ -28,12 +28,11 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const [perfilObligatorio, setPerfilObligatorio] = useState(false);
   
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
-  const [perfilMenuAbierto, setPerfilMenuAbierto] = useState(false); // NUEVO: Estado para el menú del avatar
+  const [perfilMenuAbierto, setPerfilMenuAbierto] = useState(false);
   const [guiaConductual, setGuiaConductual] = useState(false);
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
-  // Cerrar menú de perfil al hacer clic afuera
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -67,6 +66,19 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // --- NUEVO: PREVENCIÓN DE PANTALLA NEGRA ---
+  // Si el navegador intenta abrir una vista que requiere un grupo, pero no hay grupo en memoria, lo regresamos a elegir.
+  useEffect(() => {
+    if (vistaActual === 'mi-aula' && !aulaSeleccionada) {
+      setVistaActual('mis-grupos-aula');
+      window.history.replaceState(null, '', '#mis-grupos-aula');
+    } else if (vistaActual === 'vista-grupo' && !grupoSeleccionado) {
+      setVistaActual('mis-grupos');
+      window.history.replaceState(null, '', '#mis-grupos');
+    }
+  }, [vistaActual, aulaSeleccionada, grupoSeleccionado]);
+  // -------------------------------------------
 
   const navegarModulo = (modulo: any) => {
     verificarVigenciaKeyPlus(userEmail); 
@@ -182,7 +194,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           </nav>
         </div>
 
-        {/* NUEVO MENÚ DE PERFIL DESPLEGABLE PARA LIMPIAR LA BARRA */}
         <div style={{ position: 'relative' }} ref={menuRef}>
           <div onClick={() => setPerfilMenuAbierto(!perfilMenuAbierto)} style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--bg-panel)', padding: '0.3rem 1rem 0.3rem 0.3rem', borderRadius: '50px', border: '1px solid var(--border-color)', cursor: 'pointer', transition: 'all 0.2s' }} className="hover-opacity">
             <img src={`https://ui-avatars.com/api/?name=${userEmail.charAt(0)}&background=1C51FF&color=fff`} alt="Avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0 }} />
@@ -214,6 +225,11 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
             <span style={{ color: vistaActual === 'biblioteca' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('biblioteca')}>📚 Biblioteca Docente</span>
             <span style={{ color: vistaActual === 'modulo-ia' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('modulo-ia')}>🤖 Asistente IA</span>
             <span style={{ color: vistaActual === 'utilidades' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('utilidades')}>🛠️ Utilidades</span>
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
+            <span style={{ color: 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => { if(!perfilObligatorio) { setMostrarPerfil(true); setMenuMovilAbierto(false); } }}>👤 Mi Perfil</span>
+            <span style={{ color: 'var(--accent-purple)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={toggleAyuda}>{ayudaActiva ? '💡 Desactivar Ayuda' : '💡 Activar Ayuda'}</span>
+            {onSwitchToAdmin && <span style={{ color: 'var(--accent-red)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={onSwitchToAdmin}>👑 Panel Admin</span>}
+            {onLogout && <span style={{ color: 'var(--accent-red)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={onLogout}>🚪 Cerrar Sesión</span>}
           </div>
         )}
       </header>
@@ -312,16 +328,15 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Selecciona un grupo para gestionar su Pizarra y sus Actividades.</p>
               </div>
               
-              {/* MAGIA CSS: Ocultamos el botón "Crear Grupo" y los botones de Asistencia/Editar/Eliminar de las tarjetas */}
               <style>{`
                 .mi-aula-theme .activity-card { border-top: 4px solid var(--accent-purple) !important; background-color: var(--bg-panel) !important; }
                 .mi-aula-theme h3 { color: var(--accent-purple) !important; }
                 .mi-aula-theme button.pill-btn { background-color: var(--accent-purple) !important; }
                 
-                /* Ocultar el botón superior de "Crear Grupo" (es el único botón suelto en la vista principal de MisGrupos) */
+                /* Ocultar el botón superior de "Crear Grupo" */
                 .mi-aula-theme > div > div:first-child > button { display: none !important; }
                 
-                /* Ocultar Asistencia, Editar y Eliminar de las tarjetas (son los botones del 2 al 4) */
+                /* Ocultar Asistencia, Editar y Eliminar de las tarjetas */
                 .mi-aula-theme .activity-card button:nth-of-type(n+2) { display: none !important; }
               `}</style>
               
