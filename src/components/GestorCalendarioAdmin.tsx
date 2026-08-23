@@ -8,7 +8,8 @@ export interface FechaOficial {
   fecha: string; 
   fechaFin?: string; 
   titulo: string;
-  tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga' | 'Vacaciones';
+  // NUEVO: Agregada categoría 'SEP'
+  tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga' | 'Vacaciones' | 'SEP';
 }
 
 export interface AvisoGlobal {
@@ -26,7 +27,8 @@ export const COLORES_OFICIALES = {
   Vacaciones: '#00BCD4', 
   Evaluacion: '#FF9800', 
   InicioFin: '#4CAF50', 
-  Descarga: '#9C27B0' 
+  Descarga: '#9C27B0',
+  SEP: '#009688' // NUEVO: Color para la categoría SEP (Teal)
 };
 
 export default function GestorCalendarioAdmin() {
@@ -36,7 +38,7 @@ export default function GestorCalendarioAdmin() {
 
   // Estados para Fechas Oficiales
   const [fechas, setFechas] = useState<FechaOficial[]>([]);
-  const [eventoEditando, setEventoEditando] = useState<string | null>(null); // NUEVO: Estado para saber qué editamos
+  const [eventoEditando, setEventoEditando] = useState<string | null>(null);
   const [tipoDuracion, setTipoDuracion] = useState<'dia' | 'periodo'>('dia');
   const [nuevaFecha, setNuevaFecha] = useState('');
   const [nuevaFechaFin, setNuevaFechaFin] = useState('');
@@ -99,7 +101,6 @@ export default function GestorCalendarioAdmin() {
       setNuevaFechaFin('');
     }
     
-    // Hacemos scroll suave hacia arriba para ver el formulario
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -120,7 +121,6 @@ export default function GestorCalendarioAdmin() {
     
     setGuardando(true);
     try {
-      // Si estamos editando, usamos el ID existente; si no, creamos uno nuevo
       const idDoc = eventoEditando ? eventoEditando : `evt_${Date.now()}`;
       const docRef = doc(db, 'calendario_oficial', idDoc);
       
@@ -133,11 +133,9 @@ export default function GestorCalendarioAdmin() {
       if (tipoDuracion === 'periodo') {
         dataFecha.fechaFin = nuevaFechaFin;
       } else {
-        // En caso de que haya cambiado de periodo a día, vaciamos la fecha de fin
         dataFecha.fechaFin = '';
       }
       
-      // setDoc con merge permite actualizar si existe o crear si no existe
       await setDoc(docRef, dataFecha, { merge: true });
       
       const nuevoEvento = { id: idDoc, ...dataFecha };
@@ -152,7 +150,6 @@ export default function GestorCalendarioAdmin() {
       nuevaLista.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
       setFechas(nuevaLista);
       
-      // Limpiamos el formulario
       cancelarEdicion();
     } catch (error) {
       alert("Error al guardar la fecha oficial.");
@@ -164,7 +161,7 @@ export default function GestorCalendarioAdmin() {
     if (window.confirm("¿Seguro que deseas eliminar este evento oficial?")) {
       await deleteDoc(doc(db, 'calendario_oficial', id));
       setFechas(fechas.filter(f => f.id !== id));
-      if (eventoEditando === id) cancelarEdicion(); // Si borra el que estaba editando, limpiamos el form
+      if (eventoEditando === id) cancelarEdicion(); 
     }
   };
 
@@ -271,6 +268,8 @@ export default function GestorCalendarioAdmin() {
                     <option value="Evaluacion">Evaluación / Boletas</option>
                     <option value="Descarga">Descarga Administrativa</option>
                     <option value="InicioFin">Inicio / Fin de Clases</option>
+                    {/* NUEVO: Opción de la categoría SEP */}
+                    <option value="SEP">SEP / Institucional</option>
                   </select>
                 </div>
                 <div style={{ flex: 2, minWidth: '200px' }}>

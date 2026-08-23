@@ -9,7 +9,7 @@ interface EventoOficial {
   fecha: string;
   fechaFin?: string;
   titulo: string;
-  tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga' | 'Vacaciones';
+  tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga' | 'Vacaciones' | 'SEP';
 }
 
 interface AvisoGlobal {
@@ -34,7 +34,8 @@ const COLORES_OFICIALES = {
   Vacaciones: '#00BCD4',
   Evaluacion: '#FF9800',
   InicioFin: '#4CAF50',
-  Descarga: '#9C27B0'
+  Descarga: '#9C27B0',
+  SEP: '#009688'
 };
 
 const COLORES_NOTAS = [
@@ -62,7 +63,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
   const [colorNota, setColorNota] = useState(COLORES_NOTAS[0].hex);
   const [guardando, setGuardando] = useState(false);
 
-  // Fecha local estricta (Soluciona el problema de UTC adelantando un día)
+  // Fecha local estricta
   const obtenerFechaLocalString = (fecha: Date) => {
     const offset = fecha.getTimezoneOffset() * 60000;
     return (new Date(fecha.getTime() - offset)).toISOString().split('T')[0];
@@ -182,7 +183,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     }
   };
 
-  // Verificadores robustos (con fallback por si falta fechaFin en la BD antigua)
   const verificarEventosDelDia = (fechaIteracion: string) => {
     return eventosOficiales.filter(evento => {
       const inicio = evento.fecha;
@@ -216,10 +216,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     const esHoy = hoyLocalString === fechaIteracion;
     const estaSeleccionado = diaSeleccionado === fechaIteracion;
     
-    // El punto se muestra siempre que el evento cubra la fecha (historico y futuro)
     const tieneAviso = avisosDelDia.length > 0;
-    
-    // MAGIA UX: El fondo amarillo solo ilumina si la fecha del calendario es de hoy hacia el futuro
     const esAvisoVigenteHoyEnAdelante = tieneAviso && (fechaIteracion >= hoyLocalString);
     
     const eventoPrincipal = eventosDelDia.length > 0 ? eventosDelDia[0] : null;
@@ -228,6 +225,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     if (esAvisoVigenteHoyEnAdelante) bgColor = 'rgba(255, 193, 7, 0.1)'; 
     else if (notasDelDia.length > 0) bgColor = `${notasDelDia[0].color}15`; 
     else if (eventoPrincipal?.tipo === 'Vacaciones') bgColor = `${COLORES_OFICIALES.Vacaciones}15`; 
+    else if (eventoPrincipal?.tipo === 'SEP') bgColor = `${COLORES_OFICIALES.SEP}10`; 
 
     celdas.push(
       <div 
@@ -240,14 +238,12 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           borderTop: eventoPrincipal ? `4px solid ${COLORES_OFICIALES[eventoPrincipal.tipo]}` : (esAvisoVigenteHoyEnAdelante ? '4px solid #FFC107' : '1px solid #e0e0e0')
         }}
       >
-        {/* CORRECCIÓN UX: Posición Absoluta para que la bolita nunca sea aplastada */}
         {tieneAviso && (
           <div style={{ position: 'absolute', top: '6px', left: '6px', zIndex: 5 }} title="¡Aviso en este día!">
              <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#FFC107', animation: 'avisoPulse 1.5s infinite', boxShadow: '0 0 4px rgba(255,193,7,0.8)' }}></div>
           </div>
         )}
 
-        {/* Contenedor Flex para alinear el número del día a la derecha */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '4px' }}>
           <span className="cal-number" style={{ 
             color: esHoy ? 'white' : '#333', 
