@@ -15,6 +15,7 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [vista, setVista] = useState<'lista' | 'formulario' | 'calificar'>('lista');
   const [evidenciaActiva, setEvidenciaActiva] = useState<Evidencia | null>(null);
+  const [userEmail, setUserEmail] = useState('');
   
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [titulo, setTitulo] = useState('');
@@ -42,6 +43,13 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
+    // Extraer correo de sesión
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    if (sessionLocal) {
+      const sessionData = JSON.parse(sessionLocal);
+      setUserEmail(sessionData?.user?.email || sessionData?.email || '');
+    }
+
     getDoc(doc(db, 'groups', idGrupo)).then(snap => { if(snap.exists()) setDatosGrupo(snap.data()); });
     
     const fetchAlumnos = async () => {
@@ -114,7 +122,6 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     else setExcelActividades([...excelActividades, id]);
   };
 
-  /* ------------------- EXPORTAR LISTA DE ACTIVIDADES ------------------- */
   const obtenerActividadesAExportar = () => {
     let actExportar = [];
     if (tipoExport === 'todo') actExportar = evidencias;
@@ -123,18 +130,31 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     return actExportar;
   };
 
-  const exportarWord = () => {
+  // Función genérica para obtener el perfil desde la nube
+  const obtenerPerfilNube = async () => {
+    if (!userEmail) return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
+    try {
+      const docRef = doc(db, 'teacher_settings', userEmail);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().memoriaEscolar) {
+        return docSnap.data().memoriaEscolar;
+      }
+    } catch (error) {
+      console.error("Error al obtener perfil de la nube", error);
+    }
+    return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
+  };
+
+  /* ------------------- EXPORTAR LISTA DE ACTIVIDADES ------------------- */
+  const exportarWord = async () => {
     const actExportar = obtenerActividadesAExportar();
     if(actExportar.length === 0) { alert("No hay actividades en esta selección."); return; }
 
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada';
-    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
+    const ubicacion = perfilNube.ubicacion || 'Ubicación no registrada';
     const enfasisTxt = datosGrupo?.emphasis ? `<br/><b>Énfasis:</b> ${datosGrupo.emphasis}` : '';
 
     const htmlContent = `
@@ -184,18 +204,15 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     setModalWord(false); setSeleccionManual([]);
   };
 
-  const exportarPDF = () => {
+  const exportarPDF = async () => {
     const actExportar = obtenerActividadesAExportar();
     if(actExportar.length === 0) { alert("No hay actividades en esta selección."); return; }
 
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada';
-    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
+    const ubicacion = perfilNube.ubicacion || 'Ubicación no registrada';
     const enfasisTxt = datosGrupo?.emphasis ? ` - Énfasis: ${datosGrupo.emphasis}` : '';
 
     const docRef = new jsPDF();
@@ -225,7 +242,7 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     docRef.text(`Grado y Grupo: ${datosGrupo?.name}   |   Disciplina: ${datosGrupo?.subject}${enfasisTxt}`, 14, posY);
     posY += 8;
 
-    // Tabla de Actividades con tipado fuerte
+    // Tabla de Actividades
     const bodyData = actExportar.map(a => [
       a.numero || '', 
       a.titulo || '', 
@@ -253,16 +270,13 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
   };
 
   /* ------------------- EXPORTAR LISTA DE COTEJO ------------------- */
-  const exportarListaCotejo = () => {
+  const exportarListaCotejo = async () => {
     if(excelActividades.length === 0) { alert("Selecciona al menos una actividad para evaluar."); return; }
 
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada';
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
     const enfasisTxt = datosGrupo?.emphasis ? `&nbsp;&nbsp;|&nbsp;&nbsp; <b>Énfasis:</b> ${datosGrupo.emphasis}` : '';
 
     const actividadesSeleccionadas = evidencias.filter(e => excelActividades.includes(e.id));
@@ -319,25 +333,21 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     setModalListaCotejo(false); setExcelActividades([]);
   };
 
-  const exportarListaCotejoPDF = () => {
+  const exportarListaCotejoPDF = async () => {
     if(excelActividades.length === 0) { alert("Selecciona al menos una actividad para evaluar."); return; }
 
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada';
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
     const enfasisTxt = datosGrupo?.emphasis ? ` - Énfasis: ${datosGrupo.emphasis}` : '';
 
-    // Documento en formato Horizontal (Landscape)
     const docRef = new jsPDF('l', 'mm', 'a4'); 
     let posY = 15;
 
     docRef.setFontSize(14);
     docRef.setTextColor(28, 81, 255);
-    docRef.text(escuela, 148.5, posY, { align: 'center' }); // 148.5 es el centro en A4 Landscape
+    docRef.text(escuela, 148.5, posY, { align: 'center' });
     posY += 6;
     docRef.setFontSize(12);
     docRef.setTextColor(0, 0, 0);
@@ -351,7 +361,6 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
     const actividadesSeleccionadas = evidencias.filter(e => excelActividades.includes(e.id));
     const headRows = ['No.', 'Nombre del Estudiante', ...actividadesSeleccionadas.map(a => `A${a.numero}\n${a.titulo.substring(0,10)}...`), 'Total'];
     
-    // Tipado fuerte para TypeScript
     const bodyData = alumnos.map(al => [
       al.studentNumber || '',
       al.fullName || '',
@@ -374,16 +383,13 @@ export default function TabEvidencias({ idGrupo }: { idGrupo: string }) {
   };
 
   /* ------------------- EXPORTAR CONCENTRADO EXCEL ------------------- */
-  const exportarConcentradoExcel = () => {
+  const exportarConcentradoExcel = async () => {
     setExportandoConcentrado(true);
     try {
-      const sessionLocal = localStorage.getItem('aulaPlusSession');
-      const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-      const pLocal = localStorage.getItem('aulaPlusPerfil');
-      const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-      const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-      const escuela = perfilData?.escuela || 'Escuela no registrada';
+      // EXTRACCIÓN DE LA NUBE
+      const perfilNube = await obtenerPerfilNube();
+      const nombreDocente = perfilNube.nombre || 'Docente';
+      const escuela = perfilNube.escuela || 'Escuela no registrada';
 
       const evsTrimestre = evidencias.filter(e => e.trimestre === trimestreConcentrado);
 
