@@ -4,7 +4,8 @@ import GestorLlaves from '../components/GestorLlaves';
 import GestorCalendarioAdmin from '../components/GestorCalendarioAdmin';
 
 export default function SuperAdmin({ onLogout, onSwitchView }: { onLogout: () => void, onSwitchView?: () => void }) {
-  const [tabActiva, setTabActiva] = useState<'llaves' | 'biblioteca' | 'calendario'>('llaves');
+  // Cambio aquí: 'calendario' es ahora el estado inicial
+  const [tabActiva, setTabActiva] = useState<'llaves' | 'biblioteca' | 'calendario'>('calendario');
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', animation: 'fadeIn 0.3s' }}>

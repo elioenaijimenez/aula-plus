@@ -56,14 +56,13 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
   
   const [fechaActual, setFechaActual] = useState(new Date());
   const [diaSeleccionado, setDiaSeleccionado] = useState<string>('');
-  
   const [viendoAvisosGenerales, setViendoAvisosGenerales] = useState(false);
 
   const [textoNota, setTextoNota] = useState('');
   const [colorNota, setColorNota] = useState(COLORES_NOTAS[0].hex);
   const [guardando, setGuardando] = useState(false);
 
-  // Obtener fecha local estricta
+  // Fecha local estricta (Soluciona el problema de UTC adelantando un día)
   const obtenerFechaLocalString = (fecha: Date) => {
     const offset = fecha.getTimezoneOffset() * 60000;
     return (new Date(fecha.getTime() - offset)).toISOString().split('T')[0];
@@ -183,19 +182,20 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     }
   };
 
+  // Verificadores robustos (con fallback por si falta fechaFin en la BD antigua)
   const verificarEventosDelDia = (fechaIteracion: string) => {
     return eventosOficiales.filter(evento => {
-      if (!evento.fechaFin) {
-        return evento.fecha === fechaIteracion; 
-      } else {
-        return fechaIteracion >= evento.fecha && fechaIteracion <= evento.fechaFin; 
-      }
+      const inicio = evento.fecha;
+      const fin = evento.fechaFin || evento.fecha;
+      return fechaIteracion >= inicio && fechaIteracion <= fin; 
     });
   };
 
   const verificarAvisosDelDia = (fechaIteracion: string) => {
     return avisosGlobales.filter(aviso => {
-       return fechaIteracion >= aviso.fechaInicio && fechaIteracion <= aviso.fechaFin;
+       const inicio = aviso.fechaInicio;
+       const fin = aviso.fechaFin || aviso.fechaInicio;
+       return fechaIteracion >= inicio && fechaIteracion <= fin;
     });
   };
 
@@ -215,9 +215,11 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     
     const esHoy = hoyLocalString === fechaIteracion;
     const estaSeleccionado = diaSeleccionado === fechaIteracion;
+    
+    // El punto se muestra siempre que el evento cubra la fecha (historico y futuro)
     const tieneAviso = avisosDelDia.length > 0;
     
-    // MAGIA UX: Solo destacamos el fondo amarillo si el aviso no ha pasado
+    // MAGIA UX: El fondo amarillo solo ilumina si la fecha del calendario es de hoy hacia el futuro
     const esAvisoVigenteHoyEnAdelante = tieneAviso && (fechaIteracion >= hoyLocalString);
     
     const eventoPrincipal = eventosDelDia.length > 0 ? eventosDelDia[0] : null;
@@ -238,21 +240,21 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           borderTop: eventoPrincipal ? `4px solid ${COLORES_OFICIALES[eventoPrincipal.tipo]}` : (esAvisoVigenteHoyEnAdelante ? '4px solid #FFC107' : '1px solid #e0e0e0')
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-          
-          <div style={{ padding: '4px' }}>
-            {/* El punto parpadeante se queda toda la duración del evento */}
-            {tieneAviso && (
-               <div title="¡Hay un aviso para este día!" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#FFC107', animation: 'avisoPulse 1.5s infinite' }}></div>
-            )}
+        {/* CORRECCIÓN UX: Posición Absoluta para que la bolita nunca sea aplastada */}
+        {tieneAviso && (
+          <div style={{ position: 'absolute', top: '6px', left: '6px', zIndex: 5 }} title="¡Aviso en este día!">
+             <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#FFC107', animation: 'avisoPulse 1.5s infinite', boxShadow: '0 0 4px rgba(255,193,7,0.8)' }}></div>
           </div>
+        )}
 
+        {/* Contenedor Flex para alinear el número del día a la derecha */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '4px' }}>
           <span className="cal-number" style={{ 
             color: esHoy ? 'white' : '#333', 
             backgroundColor: esHoy ? 'var(--accent-blue)' : 'transparent',
             borderRadius: esHoy ? '50%' : '0',
-            width: esHoy ? '26px' : 'auto',
-            height: esHoy ? '26px' : 'auto',
+            width: esHoy ? '24px' : 'auto',
+            height: esHoy ? '24px' : 'auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -321,6 +323,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           display: flex;
           flex-direction: column;
           overflow: hidden;
+          position: relative;
         }
         .cal-cell:hover:not(.empty) {
           box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -333,7 +336,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           z-index: 11;
         }
         .cal-cell.empty { background: transparent; border: none; cursor: default; }
-        .cal-number { font-size: 1rem; margin-bottom: 0.2rem; font-weight: 600; margin-left: auto; }
+        .cal-number { font-size: 1rem; font-weight: 600; margin-left: auto; }
         .cal-indicators { display: flex; flex-direction: column; gap: 3px; flex: 1; margin-top: 2px; }
         .cal-badge.official {
           color: white;
@@ -347,12 +350,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           text-overflow: ellipsis;
         }
         .cal-notes-wrapper { display: flex; gap: 3px; flex-wrap: wrap; margin-top: auto; padding-bottom: 0.2rem; }
-        .cal-note-dot {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        }
+        .cal-note-dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
         .agenda-layout {
           display: grid;
@@ -457,7 +455,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           </div>
         </section>
 
-        {/* PANEL LATERAL: DETALLES DEL DÍA, POST-ITS O AVISOS GENERALES */}
+        {/* PANEL LATERAL */}
         <aside id="panel-detalles" style={{ position: 'sticky', top: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)', animation: 'fadeIn 0.2s' }}>
@@ -493,7 +491,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     
-                    {/* Avisos del Día (Prioridad 1) con Fechas */}
                     {avisosSeleccionados.map(aviso => (
                       <div key={aviso.id} style={{ padding: '1rem', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderRadius: '8px', border: '1px solid #FFC107' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
@@ -508,7 +505,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
                       </div>
                     ))}
 
-                    {/* Eventos Oficiales del Día */}
                     {eventosSeleccionados.map(evt => (
                       <div key={evt.id} style={{ padding: '0.8rem', backgroundColor: 'var(--bg-input)', borderRadius: '8px', borderLeft: `4px solid ${COLORES_OFICIALES[evt.tipo]}` }}>
                         <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: COLORES_OFICIALES[evt.tipo] }}>OFICIAL: {evt.tipo}</span>
@@ -516,7 +512,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
                       </div>
                     ))}
 
-                    {/* Notas Personales del Día */}
                     {notasSeleccionadas.map(nota => (
                       <div key={nota.id} style={{ padding: '0.8rem', backgroundColor: nota.color, borderRadius: '8px', color: '#000', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
@@ -533,7 +528,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
 
                     <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '0.5rem 0' }} />
 
-                    {/* Formulario de Nueva Nota */}
                     <TutorialTooltip mensaje="Elige un color para tu post-it y presiona Guardar. Se sincronizará en todos tus dispositivos." posicion="top" esBloque={true}>
                       <form onSubmit={guardarNota} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                         <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Añadir recordatorio:</label>
@@ -571,7 +565,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
             )}
           </div>
 
-          {/* Leyenda Oficial */}
           <div style={{ backgroundColor: 'var(--bg-input)', padding: '1.2rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
             <h5 style={{ margin: '0 0 0.8rem 0', color: 'var(--text-muted)' }}>Simbología Oficial</h5>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem', fontSize: '0.8rem', color: 'var(--text-main)' }}>
