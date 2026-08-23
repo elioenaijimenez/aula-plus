@@ -8,7 +8,6 @@ import Biblioteca from '../components/Biblioteca';
 import Utilidades from '../components/Utilidades';
 import ModuloIA from '../components/ModuloIA';
 import CalendarioEscolar from '../components/CalendarioEscolar'; 
-// CORRECCIÓN: Agregamos el import de MiAula
 import MiAula from '../components/MiAula'; 
 import { useTutorial } from '../context/TutorialContext'; 
 import TutorialTooltip from '../components/TutorialTooltip';
@@ -31,6 +30,44 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const [guiaConductual, setGuiaConductual] = useState(false);
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
+
+  // --- SOLUCIÓN DEL BOTÓN DE RETROCESO (HISTORY API) ---
+  useEffect(() => {
+    // Al cargar, revisamos si hay un hash en la URL para llevarlo a esa vista
+    if (!window.location.hash) {
+      window.history.replaceState(null, '', '#inicio');
+    } else {
+      const hash = window.location.hash.replace('#', '');
+      if (['inicio', 'crear-grupo', 'mis-grupos', 'vista-grupo', 'reportes', 'utilidades', 'biblioteca', 'modulo-ia', 'calendario', 'mis-grupos-aula', 'mi-aula'].includes(hash)) {
+        setVistaActual(hash as any);
+      }
+    }
+
+    // Escuchador del botón "Atrás" o "Adelante" del navegador/celular
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        setVistaActual(hash as any);
+      } else {
+        setVistaActual('inicio');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Función actualizada para que el cambio de módulo se guarde en el historial de navegación
+  const navegarModulo = (modulo: any) => {
+    verificarVigenciaKeyPlus(userEmail); 
+    if (window.location.hash.replace('#', '') !== modulo) {
+      window.history.pushState(null, '', `#${modulo}`);
+    }
+    setVistaActual(modulo);
+    limpiarPaneles();
+    setMenuMovilAbierto(false); 
+  };
+  // ------------------------------------------------------
 
   const verificarVigenciaKeyPlus = async (emailToVerify: string) => {
     if (!emailToVerify || emailToVerify === 'eliojimenezm@gmail.com' || emailToVerify === 'blaneguapo@gmail.com') return;
@@ -79,27 +116,22 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const abrirGrupo = (id: string, nombre: string) => {
     verificarVigenciaKeyPlus(userEmail); 
     setGrupoSeleccionado({ id, nombre, tab: 'alumnos' });
+    window.history.pushState(null, '', `#vista-grupo`);
     setVistaActual('vista-grupo');
   };
 
   const abrirMiAula = (id: string, nombre: string) => {
     verificarVigenciaKeyPlus(userEmail); 
     setAulaSeleccionada({ id, nombre });
+    window.history.pushState(null, '', `#mi-aula`);
     setVistaActual('mi-aula');
-  };
-
-  const navegarModulo = (modulo: any) => {
-    verificarVigenciaKeyPlus(userEmail); 
-    setVistaActual(modulo);
-    limpiarPaneles();
-    setMenuMovilAbierto(false); 
   };
 
   const maxVark = Math.max(varkInfo.v, varkInfo.a, varkInfo.r, varkInfo.k, 1);
   
   const modulos = [
     { id: 'mis-grupos-aula', titulo: 'Mi Aula Virtual', subtitulo: 'Actividades, Pizarra y Biblioteca', color: 'var(--accent-purple)', inicial: 'A' },
-    { id: 'mis-grupos', titulo: 'Libreta Administrativa', subtitulo: 'Ver listas, VARK y asistencia', color: 'var(--accent-blue)', inicial: 'L' },
+    { id: 'mis-grupos', titulo: 'Gestión y Asistencia', subtitulo: 'Ver listas, VARK y asistencia', color: 'var(--accent-blue)', inicial: 'G' },
     { id: 'calendario', titulo: 'Calendario Escolar', subtitulo: 'Planea el ciclo con tus post-its', color: '#FFC107', inicial: 'C' }, 
     { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Reportes que comunican mejor', color: 'var(--accent-green)', inicial: 'R' },
     { id: 'biblioteca', titulo: 'Biblioteca Docente', subtitulo: 'Entra y sorprendete con el contenido', color: 'var(--accent-darkred)', inicial: 'B' },
@@ -129,12 +161,15 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
             <span style={{ fontWeight: 700, fontSize: '1.2rem', letterSpacing: '1px' }}>AULA+</span>
           </div>
 
-          <nav className="desktop-nav" style={{ display: 'flex', gap: '1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>
+          <nav className="desktop-nav" style={{ display: 'flex', gap: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600, overflowX: 'auto', whiteSpace: 'nowrap' }}>
             <span style={{ color: vistaActual === 'inicio' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('inicio')}>Inicio</span>
-            <span style={{ color: vistaActual === 'mis-grupos-aula' || vistaActual === 'mi-aula' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('mis-grupos-aula')}>Mi Aula</span>
-            <span style={{ color: vistaActual === 'mis-grupos' || vistaActual === 'vista-grupo' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('mis-grupos')}>Libreta</span>
-            <span style={{ color: vistaActual === 'calendario' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('calendario')}>Calendario</span>
-            <span style={{ color: vistaActual === 'reportes' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('reportes')}>Reportes</span>
+            <span style={{ color: vistaActual === 'mis-grupos-aula' || vistaActual === 'mi-aula' ? 'var(--accent-purple)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('mis-grupos-aula')}>Mi Aula</span>
+            <span style={{ color: vistaActual === 'mis-grupos' || vistaActual === 'vista-grupo' ? 'var(--accent-blue)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('mis-grupos')}>Gestión y Asistencia</span>
+            <span style={{ color: vistaActual === 'calendario' ? 'var(--accent-yellow)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('calendario')}>Calendario</span>
+            <span style={{ color: vistaActual === 'reportes' ? 'var(--accent-green)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('reportes')}>Reportes</span>
+            <span style={{ color: vistaActual === 'biblioteca' ? 'var(--accent-darkred)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('biblioteca')}>Biblioteca</span>
+            <span style={{ color: vistaActual === 'modulo-ia' ? '#FF9800' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('modulo-ia')}>Asistente IA</span>
+            <span style={{ color: vistaActual === 'utilidades' ? '#607D8B' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('utilidades')}>Utilidades</span>
           </nav>
         </div>
 
@@ -158,9 +193,12 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', padding: '1.5rem', zIndex: 1000, gap: '1.2rem', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', animation: 'fadeIn 0.2s' }}>
             <span style={{ color: vistaActual === 'inicio' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('inicio')}>🏠 Inicio</span>
             <span style={{ color: vistaActual === 'mis-grupos-aula' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('mis-grupos-aula')}>🎓 Mi Aula Virtual</span>
-            <span style={{ color: vistaActual === 'mis-grupos' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('mis-grupos')}>👥 Libreta Administrativa</span>
+            <span style={{ color: vistaActual === 'mis-grupos' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('mis-grupos')}>👥 Gestión y Asistencia</span>
             <span style={{ color: vistaActual === 'calendario' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('calendario')}>📅 Calendario Escolar</span>
             <span style={{ color: vistaActual === 'reportes' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('reportes')}>📊 Reportes y Estadísticas</span>
+            <span style={{ color: vistaActual === 'biblioteca' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('biblioteca')}>📚 Biblioteca Docente</span>
+            <span style={{ color: vistaActual === 'modulo-ia' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('modulo-ia')}>🤖 Asistente IA</span>
+            <span style={{ color: vistaActual === 'utilidades' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('utilidades')}>🛠️ Utilidades</span>
             <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
             <span style={{ color: 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => { if(!perfilObligatorio) { setMostrarPerfil(true); setMenuMovilAbierto(false); } }}>👤 Mi Perfil</span>
             <span style={{ color: 'var(--accent-purple)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={toggleAyuda}>{ayudaActiva ? '💡 Desactivar Ayuda' : '💡 Activar Ayuda'}</span>
@@ -202,7 +240,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
               </div>
             )}
 
-            {/* CORRECCIÓN: Confirmamos que la variable guiaConductual se lee aquí */}
             {guiaConductual && vistaActual === 'reportes' && (
               <div className="vark-stats-card" style={{ borderLeft: '4px solid var(--accent-yellow)' }}>
                 <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>💡 Guía de Llenado</h4>
@@ -242,13 +279,39 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           
           {/* Vistas de Grupo / Libreta */}
           {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} />}
-          {vistaActual === 'mis-grupos' && <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirGrupo} />}
+          
+          {vistaActual === 'mis-grupos' && (
+            <div style={{ animation: 'fadeIn 0.3s' }}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h2 style={{ margin: '0 0 0.5rem 0', color: 'var(--accent-blue)' }}>📋 Gestión y Asistencia</h2>
+                <p style={{ margin: 0, color: 'var(--text-muted)' }}>Selecciona un grupo para pasar lista o ver el registro VARK.</p>
+              </div>
+              <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirGrupo} />
+            </div>
+          )}
+
           {vistaActual === 'vista-grupo' && grupoSeleccionado && (
             <VistaGrupo key={`${grupoSeleccionado.id}-${grupoSeleccionado.tab}`} idGrupo={grupoSeleccionado.id} nombreGrupo={grupoSeleccionado.nombre} tabInicial={grupoSeleccionado.tab as any} onVolver={() => navegarModulo('mis-grupos')} onVarkChange={setVarkInfo} />
           )}
 
           {/* NUEVAS VISTAS: MI AULA */}
-          {vistaActual === 'mis-grupos-aula' && <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirMiAula} />}
+          {vistaActual === 'mis-grupos-aula' && (
+            <div className="mi-aula-theme" style={{ animation: 'fadeIn 0.3s', backgroundColor: 'var(--bg-app)', padding: '2rem', borderRadius: '24px', border: '2px dashed var(--accent-purple)' }}>
+              <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                <span style={{ fontSize: '3rem' }}>🚀</span>
+                <h2 style={{ margin: '0.5rem 0', color: 'var(--accent-purple)', fontSize: '2rem' }}>Acceso a Mi Aula Virtual</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Selecciona un grupo para gestionar su Pizarra y sus Actividades.</p>
+              </div>
+              {/* MAGIA CSS: Inyectamos estilos para cambiar el color de las tarjetas de MisGrupos temporalmente a morado */}
+              <style>{`
+                .mi-aula-theme .activity-card { border-top: 4px solid var(--accent-purple) !important; background-color: var(--bg-panel) !important; }
+                .mi-aula-theme h3 { color: var(--accent-purple) !important; }
+                .mi-aula-theme button { background-color: var(--accent-purple) !important; }
+              `}</style>
+              <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirMiAula} />
+            </div>
+          )}
+
           {vistaActual === 'mi-aula' && aulaSeleccionada && (
             <MiAula idGrupo={aulaSeleccionada.id} nombreGrupo={aulaSeleccionada.nombre} onVolver={() => navegarModulo('mis-grupos-aula')} />
           )}
