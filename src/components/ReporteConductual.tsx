@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, addDoc, serverTimestamp, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 import jsPDF from 'jspdf';
@@ -13,6 +13,7 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [userEmail, setUserEmail] = useState('');
 
   const [vista, setVista] = useState<'panel' | 'formulario'>('panel');
   
@@ -27,6 +28,12 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
+    const sessionLocal = localStorage.getItem('aulaPlusSession');
+    if (sessionLocal) {
+      const sessionData = JSON.parse(sessionLocal);
+      setUserEmail(sessionData?.user?.email || sessionData?.email || '');
+    }
+
     setGuiaConductual(vista === 'formulario');
     return () => setGuiaConductual(false);
   }, [vista, setGuiaConductual]);
@@ -85,15 +92,27 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     return `${partes[2]}-${meses[parseInt(partes[1], 10) - 1]}-${partes[0]}`;
   };
 
-  const exportarBitacoraWord = (inc: Incidencia) => {
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
+  // Función genérica para obtener el perfil desde la nube
+  const obtenerPerfilNube = async () => {
+    if (!userEmail) return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
+    try {
+      const docRef = doc(db, 'teacher_settings', userEmail);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().memoriaEscolar) {
+        return docSnap.data().memoriaEscolar;
+      }
+    } catch (error) {
+      console.error("Error al obtener perfil de la nube", error);
+    }
+    return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
+  };
 
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada (Actualiza tu perfil)';
-    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+  const exportarBitacoraWord = async (inc: Incidencia) => {
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
+    const ubicacion = perfilNube.ubicacion || 'Ubicación no registrada';
     const ubicacionStr = ubicacion.includes('Morelos') ? ubicacion : `${ubicacion}, Morelos`;
 
     const htmlContent = `
@@ -153,18 +172,15 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  const exportarBitacoraPDF = (inc: Incidencia) => {
-    const docRef = new jsPDF();
-    const sessionLocal = localStorage.getItem('aulaPlusSession');
-    const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
-    const pLocal = localStorage.getItem('aulaPlusPerfil');
-    const perfilData = pLocal ? JSON.parse(pLocal) : null;
-
-    const nombreDocente = sessionData?.user?.nombre || perfilData?.nombre || 'Docente';
-    const escuela = perfilData?.escuela || 'Escuela no registrada';
-    const ubicacion = perfilData?.ubicacion || 'Ubicación no registrada';
+  const exportarBitacoraPDF = async (inc: Incidencia) => {
+    // EXTRACCIÓN DE LA NUBE
+    const perfilNube = await obtenerPerfilNube();
+    const nombreDocente = perfilNube.nombre || 'Docente';
+    const escuela = perfilNube.escuela || 'Escuela no registrada';
+    const ubicacion = perfilNube.ubicacion || 'Ubicación no registrada';
     const ubicacionStr = ubicacion.includes('Morelos') ? ubicacion : `${ubicacion}, Morelos`;
 
+    const docRef = new jsPDF();
     let posY = 20;
 
     // Folio
@@ -185,7 +201,6 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     docRef.text("(Registro de incidencias, eventualidades y seguimiento)", 105, posY, { align: 'center' });
     posY += 15;
 
-    // Función auxiliar para imprimir secciones con cajas grises
     const printSection = (title: string, content: string | string[], isTable: boolean = false) => {
       docRef.setFillColor(226, 232, 240);
       docRef.rect(14, posY - 4, 182, 7, 'F');
@@ -225,7 +240,6 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     printSection("3. MEDIDAS DE PREVENCIÓN APLICADAS", inc.medidas);
     printSection("4. COMPROMISOS DE LOS TUTORES (Acuerdos)", inc.compromisos);
 
-    // Firmas
     if (posY > 230) { docRef.addPage(); posY = 20; }
 
     docRef.setFillColor(226, 232, 240);
@@ -247,7 +261,6 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     posY += 5;
     docRef.text("Docente", 40, posY, { align: 'center' });
 
-    // Footer de Privacidad
     posY += 20;
     docRef.setDrawColor(200, 200, 200);
     docRef.line(14, posY, 196, posY);
