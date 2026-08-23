@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import FormularioGrupo from '../components/FormularioGrupo';
 import MisGrupos from '../components/MisGrupos';
 import VistaGrupo from '../components/VistaGrupo';
@@ -26,12 +26,25 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const [varkInfo, setVarkInfo] = useState<VarkInfo>({ visible: false, v: 0, a: 0, r: 0, k: 0 });
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
   const [perfilObligatorio, setPerfilObligatorio] = useState(false);
+  
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+  const [perfilMenuAbierto, setPerfilMenuAbierto] = useState(false); // NUEVO: Estado para el menú del avatar
   const [guiaConductual, setGuiaConductual] = useState(false);
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
-  // --- SOLUCIÓN DEL BOTÓN DE RETROCESO (HISTORY API) ---
+  // Cerrar menú de perfil al hacer clic afuera
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setPerfilMenuAbierto(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   useEffect(() => {
     if (!window.location.hash) {
       window.history.replaceState(null, '', '#inicio');
@@ -64,7 +77,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     limpiarPaneles();
     setMenuMovilAbierto(false); 
   };
-  // ------------------------------------------------------
 
   const verificarVigenciaKeyPlus = async (emailToVerify: string) => {
     if (!emailToVerify || emailToVerify === 'eliojimenezm@gmail.com' || emailToVerify === 'blaneguapo@gmail.com') return;
@@ -138,7 +150,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); setGuiaConductual(false); };
 
-  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'mi-aula' || vistaActual === 'reportes';
+  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'reportes';
 
   return (
     <>
@@ -170,20 +182,26 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           </nav>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
-          <button onClick={toggleAyuda} className="pill-btn desktop-nav" style={{ background: ayudaActiva ? 'var(--accent-purple)' : 'var(--bg-input)', color: ayudaActiva ? 'white' : 'var(--text-muted)', border: ayudaActiva ? 'none' : '1px solid var(--border-color)', transition: 'all 0.3s ease' }}>
-            {ayudaActiva ? '💡 Ayuda: ON' : '💡 Ayuda: OFF'}
-          </button>
-          {onSwitchToAdmin && (
-            <button onClick={onSwitchToAdmin} className="pill-btn desktop-nav" style={{ background: 'var(--accent-red)', color: 'white' }}>👑 Panel Admin</button>
-          )}
-          {onLogout && (
-            <button onClick={onLogout} className="pill-btn desktop-nav" style={{ background: 'transparent', border: '1px solid var(--accent-red)', color: 'var(--accent-red)' }}>Salir</button>
-          )}
-          <div onClick={() => { if(!perfilObligatorio) setMostrarPerfil(true); }} style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--bg-panel)', padding: '0.4rem 1rem', borderRadius: '50px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+        {/* NUEVO MENÚ DE PERFIL DESPLEGABLE PARA LIMPIAR LA BARRA */}
+        <div style={{ position: 'relative' }} ref={menuRef}>
+          <div onClick={() => setPerfilMenuAbierto(!perfilMenuAbierto)} style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--bg-panel)', padding: '0.3rem 1rem 0.3rem 0.3rem', borderRadius: '50px', border: '1px solid var(--border-color)', cursor: 'pointer', transition: 'all 0.2s' }} className="hover-opacity">
             <img src={`https://ui-avatars.com/api/?name=${userEmail.charAt(0)}&background=1C51FF&color=fff`} alt="Avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0 }} />
-            <span className="desktop-nav" style={{ fontSize: '0.9rem', fontWeight: 500 }}>Mi Perfil</span>
+            <span className="desktop-nav" style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>Mi Perfil ▼</span>
           </div>
+
+          {perfilMenuAbierto && (
+            <div style={{ position: 'absolute', top: '120%', right: 0, backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '220px', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', zIndex: 1000, animation: 'fadeIn 0.2s' }}>
+              <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem' }}>
+                <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Conectado como:</span>
+                <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)', wordBreak: 'break-all' }}>{userEmail}</strong>
+              </div>
+              
+              <button onClick={() => { if(!perfilObligatorio) { setMostrarPerfil(true); setPerfilMenuAbierto(false); } }} className="pill-btn" style={{ background: 'transparent', textAlign: 'left', padding: '0.6rem', color: 'var(--text-main)', width: '100%' }}>👤 Configurar Perfil</button>
+              <button onClick={() => { toggleAyuda(); setPerfilMenuAbierto(false); }} className="pill-btn" style={{ background: ayudaActiva ? 'rgba(156, 39, 176, 0.1)' : 'transparent', color: ayudaActiva ? 'var(--accent-purple)' : 'var(--text-main)', textAlign: 'left', padding: '0.6rem', width: '100%' }}>💡 {ayudaActiva ? 'Desactivar Guías' : 'Activar Guías'}</button>
+              {onSwitchToAdmin && <button onClick={onSwitchToAdmin} className="pill-btn" style={{ background: 'rgba(255, 193, 7, 0.1)', color: 'var(--accent-yellow)', textAlign: 'left', padding: '0.6rem', width: '100%', border: 'none' }}>👑 Panel SuperAdmin</button>}
+              {onLogout && <button onClick={onLogout} className="pill-btn" style={{ background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', textAlign: 'left', padding: '0.6rem', width: '100%', border: 'none' }}>🚪 Cerrar Sesión</button>}
+            </div>
+          )}
         </div>
 
         {menuMovilAbierto && (
@@ -196,11 +214,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
             <span style={{ color: vistaActual === 'biblioteca' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('biblioteca')}>📚 Biblioteca Docente</span>
             <span style={{ color: vistaActual === 'modulo-ia' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('modulo-ia')}>🤖 Asistente IA</span>
             <span style={{ color: vistaActual === 'utilidades' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('utilidades')}>🛠️ Utilidades</span>
-            <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
-            <span style={{ color: 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => { if(!perfilObligatorio) { setMostrarPerfil(true); setMenuMovilAbierto(false); } }}>👤 Mi Perfil</span>
-            <span style={{ color: 'var(--accent-purple)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={toggleAyuda}>{ayudaActiva ? '💡 Desactivar Ayuda' : '💡 Activar Ayuda'}</span>
-            {onSwitchToAdmin && <span style={{ color: 'var(--accent-red)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={onSwitchToAdmin}>👑 Panel Admin</span>}
-            {onLogout && <span style={{ color: 'var(--accent-red)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={onLogout}>🚪 Cerrar Sesión</span>}
           </div>
         )}
       </header>
@@ -274,7 +287,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'calendario' && <CalendarioEscolar onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={setGuiaConductual} />}
           
-          {/* Vistas de Grupo / Libreta */}
           {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} />}
           
           {vistaActual === 'mis-grupos' && (
@@ -299,11 +311,20 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 <h2 style={{ margin: '0.5rem 0', color: 'var(--accent-purple)', fontSize: '2rem' }}>Acceso a Mi Aula Virtual</h2>
                 <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Selecciona un grupo para gestionar su Pizarra y sus Actividades.</p>
               </div>
+              
+              {/* MAGIA CSS: Ocultamos el botón "Crear Grupo" y los botones de Asistencia/Editar/Eliminar de las tarjetas */}
               <style>{`
                 .mi-aula-theme .activity-card { border-top: 4px solid var(--accent-purple) !important; background-color: var(--bg-panel) !important; }
                 .mi-aula-theme h3 { color: var(--accent-purple) !important; }
-                .mi-aula-theme button { background-color: var(--accent-purple) !important; }
+                .mi-aula-theme button.pill-btn { background-color: var(--accent-purple) !important; }
+                
+                /* Ocultar el botón superior de "Crear Grupo" (es el único botón suelto en la vista principal de MisGrupos) */
+                .mi-aula-theme > div > div:first-child > button { display: none !important; }
+                
+                /* Ocultar Asistencia, Editar y Eliminar de las tarjetas (son los botones del 2 al 4) */
+                .mi-aula-theme .activity-card button:nth-of-type(n+2) { display: none !important; }
               `}</style>
+              
               <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirMiAula} />
             </div>
           )}
