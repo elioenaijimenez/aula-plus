@@ -22,21 +22,26 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     return JSON.parse(localStorage.getItem('aulaPlus_likes') || '[]');
   });
 
-  // MAGIA: El reloj corre cada SEGUNDO (1000ms) para ver la cuenta regresiva en vivo
+  // Reloj en vivo (1 segundo)
   useEffect(() => {
     const int = setInterval(() => setAhora(new Date()), 1000);
     return () => clearInterval(int);
   }, []);
 
-  const buscarPizarra = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!codigo || codigo.length < 4) return;
-    
+  // MAGIA F5: Al cargar la vista, revisa si ya había un código en memoria
+  useEffect(() => {
+    const codigoGuardado = sessionStorage.getItem('aulaPlus_pizarraCode');
+    if (codigoGuardado) {
+      setCodigo(codigoGuardado.replace('AULA-', ''));
+      ejecutarBusqueda(codigoGuardado);
+    }
+  }, []);
+
+  const ejecutarBusqueda = async (cleanCode: string) => {
     setCargando(true);
     setError('');
 
     try {
-      const cleanCode = 'AULA-' + codigo;
       const qGrupo = query(collection(db, 'groups'), where('pizarraCode', '==', cleanCode));
       const snapGrupo = await getDocs(qGrupo);
 
@@ -48,13 +53,25 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
 
       const docGrupo = snapGrupo.docs[0];
       setGrupoData({ id: docGrupo.id, ...docGrupo.data() });
+      
+      // Guardamos en memoria para soportar la recarga de página (F5)
+      sessionStorage.setItem('aulaPlus_pizarraCode', cleanCode);
     } catch (err) {
       setError('Error al conectar con la pizarra.');
     }
     setCargando(false);
   };
 
-  // MAGIA: Sincronización en TIEMPO REAL. Si el maestro publica algo, aparece solo.
+  const buscarPizarra = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    let cleanCode = codigo.replace(/\s+/g, '').toUpperCase();
+    if (!cleanCode) return;
+    
+    if (!cleanCode.startsWith('AULA-')) cleanCode = 'AULA-' + cleanCode;
+    ejecutarBusqueda(cleanCode);
+  };
+
+  // Sincronización en Tiempo Real
   useEffect(() => {
     if (!grupoData) return;
     
@@ -87,29 +104,45 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     await updateDoc(refAct, { likes: increment(1) });
   };
 
-  // Temporizador Vivo: Ahora con segundos
-  const calcularTiempoRestante = (fechaFin: string) => {
+  // MAGIA SEMÁFORO: Control de colores en tiempo real
+  const obtenerEstadoTiempo = (fechaFin: string) => {
     if (!fechaFin) return null;
     const target = new Date(fechaFin);
     const diff = target.getTime() - ahora.getTime();
     
-    if (diff <= 0) return 'Expirado';
+    if (diff <= 0) return { texto: 'Expirado', color: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)', vencido: true };
     
     const d = Math.floor(diff / (1000 * 60 * 60 * 24));
     const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
     const m = Math.floor((diff / 1000 / 60) % 60);
     const s = Math.floor((diff / 1000) % 60);
     
-    if (d > 0) return `⏳ ${d}d ${h}h ${m}m`;
-    return `⏳ ${h}h ${m}m ${s}s`;
+    let texto = d > 0 ? `⏳ ${d}d ${h}h ${m}m` : `⏳ ${h}h ${m}m ${s}s`;
+    
+    // Dorado normal
+    let color = '#b28000'; 
+    let bg = 'rgba(255, 193, 7, 0.2)';
+    
+    // Validación de semáforo
+    if (d === 0 && h === 0) {
+      if (m < 1) { // 1 minuto o menos (ROJO)
+        color = '#EF4444'; 
+        bg = 'rgba(239, 68, 68, 0.2)';
+      } else if (m < 5) { // 5 minutos o menos (NARANJA)
+        color = '#F97316'; 
+        bg = 'rgba(249, 115, 22, 0.2)';
+      }
+    }
+
+    return { texto, color, bg, vencido: false };
   };
 
-  // COLORES INMERSIVOS SEGÚN EL GRADO
+  // COLORES INMERSIVOS
   const getThemeColor = (name: string) => {
     if (!name) return '#1C51FF';
-    if (name.includes('1°')) return '#10B981'; // 1ro Verde Esmeralda
-    if (name.includes('2°')) return '#1C51FF'; // 2do Azul Zafiro
-    if (name.includes('3°')) return '#F43F5E'; // 3ro Rojo Coral
+    if (name.includes('1°')) return '#10B981';
+    if (name.includes('2°')) return '#1C51FF';
+    if (name.includes('3°')) return '#F43F5E';
     return '#1C51FF';
   };
 
@@ -129,9 +162,10 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     return 'rgba(28, 81, 255, 0.3)';
   };
 
-  const temaColor = grupoData ? getThemeColor(grupoData.name) : '#1C51FF';
-  const temaBg = grupoData ? getThemeBg(grupoData.name) : 'rgba(28, 81, 255, 0.1)';
-  const temaShadow = grupoData ? getThemeShadow(grupoData.name) : 'rgba(28, 81, 255, 0.3)';
+  const handleSalir = () => {
+    sessionStorage.removeItem('aulaPlus_pizarraCode');
+    setGrupoData(null);
+  };
 
   if (!grupoData) {
     return (
@@ -151,7 +185,6 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
                 placeholder="XYZW" 
                 value={codigo} 
                 onChange={e => {
-                  // MAGIA: Solo permite letras/números y máximo 4 caracteres, cero espacios.
                   const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
                   if (val.length <= 4) setCodigo(val);
                 }}
@@ -169,13 +202,15 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
     );
   }
 
+  const temaColor = getThemeColor(grupoData.name);
+  const temaBg = getThemeBg(grupoData.name);
+  const temaShadow = getThemeShadow(grupoData.name);
+
   // Filtrar avisos vencidos MÁGICAMENTE EN VIVO (desaparecen solos)
   const avisosGenerales = actividades.filter(a => {
     if (a.tipo !== 'Aviso') return false;
-    if (a.fechaFinAviso) {
-       const target = new Date(a.fechaFinAviso).getTime();
-       if (target <= ahora.getTime()) return false; 
-    }
+    const estadoTiempo = obtenerEstadoTiempo(a.fechaFinAviso || '');
+    if (estadoTiempo && estadoTiempo.vencido) return false;
     return true;
   });
 
@@ -193,7 +228,7 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
 
       {/* HEADER DE LA PIZARRA DINÁMICO */}
       <header style={{ backgroundColor: temaColor, color: 'white', padding: '2rem 1rem', textAlign: 'center', borderBottomLeftRadius: '30px', borderBottomRightRadius: '30px', boxShadow: `0 4px 20px ${temaShadow}`, position: 'relative', transition: 'background-color 0.5s' }}>
-        <button onClick={() => setGrupoData(null)} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>← Salir</button>
+        <button onClick={handleSalir} style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>← Salir</button>
         
         {avisosGenerales.length > 0 && (
           <div style={{ position: 'absolute', top: '20px', right: '20px', fontSize: '1.5rem', animation: 'pulseGlow 2s infinite', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -215,7 +250,7 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
         {avisosGenerales.length > 0 && (
           <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {avisosGenerales.map(aviso => {
-              const tiempoRestante = calcularTiempoRestante(aviso.fechaFinAviso || '');
+              const estadoTiempo = obtenerEstadoTiempo(aviso.fechaFinAviso || '');
 
               return (
                 <div key={aviso.id} style={{ backgroundColor: '#fffdf5', borderRadius: '20px', padding: '1.5rem', border: '2px solid #FFC107', boxShadow: '0 8px 25px rgba(255, 193, 7, 0.2)', position: 'relative', overflow: 'hidden' }}>
@@ -223,9 +258,9 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
                     <span style={{ backgroundColor: '#FFC107', color: '#000', padding: '4px 12px', borderRadius: '50px', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       🔔 AVISO IMPORTANTE
                     </span>
-                    {aviso.fechaFinAviso && (
-                      <span style={{ fontSize: '0.9rem', color: '#b28000', fontWeight: 'bold', backgroundColor: 'rgba(255, 193, 7, 0.2)', padding: '4px 10px', borderRadius: '8px', minWidth: '130px', textAlign: 'center' }}>
-                        {tiempoRestante}
+                    {estadoTiempo && (
+                      <span style={{ fontSize: '0.9rem', color: estadoTiempo.color, fontWeight: 'bold', backgroundColor: estadoTiempo.bg, padding: '4px 10px', borderRadius: '8px', minWidth: '130px', textAlign: 'center', transition: 'all 0.3s' }}>
+                        {estadoTiempo.texto}
                       </span>
                     )}
                   </div>
@@ -233,8 +268,17 @@ export default function PizarraAlumno({ onVolver }: { onVolver: () => void }) {
                   <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.4rem', color: '#b28000' }}>{aviso.titulo}</h3>
                   <p style={{ margin: '0 0 1.5rem 0', color: '#555', lineHeight: '1.5', fontSize: '1rem', whiteSpace: 'pre-wrap' }}>{aviso.descripcion}</p>
 
-                  <div style={{ borderTop: '1px solid rgba(255,193,7,0.3)', paddingTop: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,193,7,0.3)', paddingTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                     <span style={{ fontSize: '0.85rem', color: '#888', fontWeight: 'bold' }}>Emitido: {aviso.fechaActividad}</span>
+                    
+                    {/* Botón Ver Material integrado en Avisos */}
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                      {aviso.enlaceDrive && (
+                        <button onClick={() => registrarVista(aviso)} style={{ padding: '0.6rem 1.2rem', borderRadius: '12px', border: 'none', backgroundColor: '#e6f0ff', color: '#1C51FF', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'background 0.2s', fontSize: '0.9rem' }}>
+                          📄 Ver Material
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth'; 
+// CORRECCIÓN: Agregamos signOut a la importación
+import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth'; 
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
 
-// AÑADIDO: 'alumno' a los roles permitidos
 export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin' | 'alumno', user: any) => void }) {
   const [paso, setPaso] = useState<1 | 2>(1);
   const [email, setEmail] = useState('');
@@ -104,6 +104,19 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
         alert(`Error técnico de Firebase:\nCódigo: ${error.code}\nMensaje: ${error.message}`);
       }
     }
+  };
+
+  // NUEVO: Función para desconectar de Google y regresar al paso 1 si eres alumno por error
+  const cancelarGoogle = async () => {
+    setCargando(true);
+    try {
+      await signOut(auth);
+      setPaso(1);
+      setNombre('');
+      setTelefono('');
+      setKeyPlus('');
+    } catch (e) { console.error("Error al salir", e); }
+    setCargando(false);
   };
 
   const procesarIngreso = async (e: React.FormEvent) => {
@@ -214,10 +227,14 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
             <button type="submit" disabled={cargando} className="pill-btn" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', backgroundColor: 'var(--accent-blue)', color: 'white', marginTop: '1rem' }}>
               {cargando ? 'Validando Licencia...' : 'Activar e Ingresar'}
             </button>
+            
+            {/* NUEVO BOTÓN: Por si el alumno se equivocó */}
+            <button type="button" onClick={cancelarGoogle} disabled={cargando} className="pill-btn" style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)', marginTop: '0.5rem' }}>
+              ← Cancelar y Volver
+            </button>
           </form>
         )}
 
-        {/* NUEVO: Acceso directo para alumnos */}
         <div style={{ marginTop: '2.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', textAlign: 'center', animation: 'fadeIn 0.5s' }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: '0 0 1rem 0' }}>¿Eres estudiante y buscas tus actividades?</p>
           <button 
