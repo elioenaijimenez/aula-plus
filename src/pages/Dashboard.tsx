@@ -27,6 +27,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
   const [perfilObligatorio, setPerfilObligatorio] = useState(false);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+  const [guiaConductual, setGuiaConductual] = useState(false);
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
@@ -135,10 +136,9 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Haz de tu clase una experiencia', color: '#607D8B', inicial: 'U' }
   ];
 
-  const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); };
+  const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); setGuiaConductual(false); };
 
-  // CORRECCIÓN: Si estamos en 'mi-aula', ocultamos el sidebar lateral
-  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'reportes';
+  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'mi-aula' || vistaActual === 'reportes';
 
   return (
     <>
@@ -236,6 +236,13 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 </div>
               </div>
             )}
+
+            {guiaConductual && vistaActual === 'reportes' && (
+              <div className="vark-stats-card" style={{ borderLeft: '4px solid var(--accent-yellow)' }}>
+                <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>💡 Guía de Llenado</h4>
+                <details className="vark-accordion"><summary>📌 Eventualidades</summary><div><p>Vocabulario inadecuado, interrumpir clase, etc.</p></div></details>
+              </div>
+            )}
           </aside>
         )}
 
@@ -265,6 +272,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'biblioteca' && <Biblioteca onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'utilidades' && <Utilidades onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'calendario' && <CalendarioEscolar onVolver={() => navegarModulo('inicio')} />}
+          {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={setGuiaConductual} />}
           
           {/* Vistas de Grupo / Libreta */}
           {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} />}
@@ -303,9 +311,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'mi-aula' && aulaSeleccionada && (
             <MiAula idGrupo={aulaSeleccionada.id} nombreGrupo={aulaSeleccionada.nombre} onVolver={() => navegarModulo('mis-grupos-aula')} />
           )}
-
-          {/* Lo dejamos al final para que la alerta de guía se dispare bien */}
-          {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={(v) => { /* Para evitar error ts */ }} />}
 
         </section>
       </main>
