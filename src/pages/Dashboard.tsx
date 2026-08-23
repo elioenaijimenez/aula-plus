@@ -7,6 +7,7 @@ import ModuloReportes from '../components/ModuloReportes';
 import Biblioteca from '../components/Biblioteca';
 import Utilidades from '../components/Utilidades';
 import ModuloIA from '../components/ModuloIA';
+import CalendarioEscolar from '../components/CalendarioEscolar'; // NUEVO COMPONENTE
 import { useTutorial } from '../context/TutorialContext'; 
 import TutorialTooltip from '../components/TutorialTooltip';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -15,7 +16,8 @@ import { db } from '../services/firebase';
 interface VarkInfo { visible: boolean; v: number; a: number; r: number; k: number; }
 
 export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: () => void, onSwitchToAdmin?: () => void }) {
-  const [vistaActual, setVistaActual] = useState<'inicio' | 'crear-grupo' | 'mis-grupos' | 'vista-grupo' | 'reportes' | 'utilidades' | 'biblioteca' | 'modulo-ia'>('inicio');
+  // AÑADIDO: 'calendario' a los estados de vista
+  const [vistaActual, setVistaActual] = useState<'inicio' | 'crear-grupo' | 'mis-grupos' | 'vista-grupo' | 'reportes' | 'utilidades' | 'biblioteca' | 'modulo-ia' | 'calendario'>('inicio');
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<{id: string, nombre: string, tab: 'alumnos' | 'asistencia' | 'evidencias'} | null>(null);
   const [userEmail, setUserEmail] = useState('');
   
@@ -27,7 +29,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
-  // VIGILANTE ACTIVO: Comprueba si el admin revocó la llave mientras estabas dentro
   const verificarVigenciaKeyPlus = async (emailToVerify: string) => {
     if (!emailToVerify || emailToVerify === 'eliojimenezm@gmail.com' || emailToVerify === 'blaneguapo@gmail.com') return;
     
@@ -52,10 +53,8 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
         const email = sessionData?.user?.email || sessionData?.email || 'default';
         setUserEmail(email);
         
-        // Ejecutamos el vigilante al montar
         await verificarVigenciaKeyPlus(email);
 
-        // Verificamos perfil
         try {
           const docRef = doc(db, 'teacher_settings', email);
           const docSnap = await getDoc(docRef);
@@ -85,13 +84,13 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   };
 
   const abrirGrupo = (id: string, nombre: string, tab: 'alumnos' | 'asistencia' | 'evidencias' = 'alumnos') => {
-    verificarVigenciaKeyPlus(userEmail); // Vigila al cambiar de vista
+    verificarVigenciaKeyPlus(userEmail); 
     setGrupoSeleccionado({ id, nombre, tab });
     setVistaActual('vista-grupo');
   };
 
   const navegarModulo = (modulo: any) => {
-    verificarVigenciaKeyPlus(userEmail); // Vigila al cambiar de módulo
+    verificarVigenciaKeyPlus(userEmail); 
     setVistaActual(modulo);
     limpiarPaneles();
     setMenuMovilAbierto(false); 
@@ -99,8 +98,10 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const maxVark = Math.max(varkInfo.v, varkInfo.a, varkInfo.r, varkInfo.k, 1);
   
+  // AÑADIDO: El módulo de Calendario a la cuadrícula de inicio
   const modulos = [
     { id: 'mis-grupos', titulo: 'Mis Grupos', subtitulo: 'Ver y gestionar listas de alumnos', color: 'var(--accent-blue)', inicial: 'G' },
+    { id: 'calendario', titulo: 'Calendario Escolar', subtitulo: 'Planea el ciclo con tus post-its', color: '#FFC107', inicial: 'C' }, // NUEVO MÓDULO (Amarillo/Dorado)
     { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Reportes que comunican mejor', color: 'var(--accent-green)', inicial: 'R' },
     { id: 'biblioteca', titulo: 'Biblioteca Docente', subtitulo: 'Entra y sorprendete con el contenido', color: 'var(--accent-purple)', inicial: 'B' },
     { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Haz de tu clase una experiencia', color: 'var(--accent-red)', inicial: 'U' },
@@ -132,9 +133,11 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
             <span style={{ fontWeight: 700, fontSize: '1.2rem', letterSpacing: '1px' }}>AULA+</span>
           </div>
 
+          {/* Menú Superior de Escritorio */}
           <nav className="desktop-nav" style={{ display: 'flex', gap: '1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>
             <span style={{ color: vistaActual === 'inicio' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('inicio')}>Inicio</span>
             <span style={{ color: vistaActual === 'mis-grupos' || vistaActual === 'vista-grupo' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('mis-grupos')}>Grupos</span>
+            <span style={{ color: vistaActual === 'calendario' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('calendario')}>Calendario</span>
             <span style={{ color: vistaActual === 'reportes' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('reportes')}>Reportes</span>
             <span style={{ color: vistaActual === 'biblioteca' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('biblioteca')}>Biblioteca</span>
             <span style={{ color: vistaActual === 'utilidades' ? 'var(--text-main)' : 'inherit', cursor: 'pointer' }} onClick={() => navegarModulo('utilidades')}>Utilidades</span>
@@ -158,10 +161,12 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           </div>
         </div>
 
+        {/* Menú Desplegable Móvil */}
         {menuMovilAbierto && (
           <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', padding: '1.5rem', zIndex: 1000, gap: '1.2rem', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', animation: 'fadeIn 0.2s' }}>
             <span style={{ color: vistaActual === 'inicio' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('inicio')}>🏠 Inicio</span>
             <span style={{ color: vistaActual === 'mis-grupos' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('mis-grupos')}>👥 Mis Grupos</span>
+            <span style={{ color: vistaActual === 'calendario' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('calendario')}>📅 Calendario Escolar</span>
             <span style={{ color: vistaActual === 'reportes' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('reportes')}>📊 Reportes y Estadísticas</span>
             <span style={{ color: vistaActual === 'biblioteca' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('biblioteca')}>📚 Biblioteca Docente</span>
             <span style={{ color: vistaActual === 'utilidades' ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', fontSize: '1.1rem' }} onClick={() => navegarModulo('utilidades')}>🛠️ Utilidades</span>
@@ -247,6 +252,9 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} />}
           {vistaActual === 'mis-grupos' && <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirGrupo} />}
           {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={setGuiaConductual} />}
+          
+          {/* AÑADIDO: Renderizar el nuevo módulo CalendarioEscolar */}
+          {vistaActual === 'calendario' && <CalendarioEscolar onVolver={() => navegarModulo('inicio')} />}
           
           {vistaActual === 'vista-grupo' && grupoSeleccionado && (
             <VistaGrupo key={`${grupoSeleccionado.id}-${grupoSeleccionado.tab}`} idGrupo={grupoSeleccionado.id} nombreGrupo={grupoSeleccionado.nombre} tabInicial={grupoSeleccionado.tab} onVolver={() => navegarModulo('mis-grupos')} onVarkChange={setVarkInfo} />
