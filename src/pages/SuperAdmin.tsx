@@ -25,9 +25,10 @@ export default function SuperAdmin({ onLogout, onSwitchView }: { onLogout: () =>
         <span className={`tab ${tabActiva === 'biblioteca' ? 'active' : ''}`} onClick={() => setTabActiva('biblioteca')} style={{ whiteSpace: 'nowrap' }}>📚 Gestión de Biblioteca Global</span>
       </div>
 
+      {tabActiva === 'calendario' && <GestorCalendarioAdmin />}
       {tabActiva === 'llaves' && <GestorLlaves />}
       {tabActiva === 'biblioteca' && <GestorBibliotecaGlobal />}
-      {tabActiva === 'calendario' && <GestorCalendarioAdmin />}
+      
     </div>
   );
 }

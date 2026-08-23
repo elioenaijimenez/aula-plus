@@ -57,7 +57,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
   const [fechaActual, setFechaActual] = useState(new Date());
   const [diaSeleccionado, setDiaSeleccionado] = useState<string>('');
   
-  // Estado para controlar la visibilidad del panel especial de avisos al tocar la campana
   const [viendoAvisosGenerales, setViendoAvisosGenerales] = useState(false);
 
   const [textoNota, setTextoNota] = useState('');
@@ -118,6 +117,12 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     };
   }, [hoyLocalString]);
 
+  const formatearFechaDisplay = (fechaStr: string) => {
+    if (!fechaStr) return '';
+    const [year, month, day] = fechaStr.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
   const obtenerDiasDelMes = (año: number, mes: number) => new Date(año, mes + 1, 0).getDate();
   const obtenerPrimerDiaDelMes = (año: number, mes: number) => new Date(año, mes, 1).getDay();
 
@@ -132,7 +137,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
 
   const seleccionarDiaParaNota = (fechaAString: string) => {
     setDiaSeleccionado(fechaAString);
-    setViendoAvisosGenerales(false); // Cierra la vista general de avisos si toca un día
+    setViendoAvisosGenerales(false); 
     setTextoNota(''); 
     if (window.innerWidth < 768) {
       setTimeout(() => {
@@ -143,7 +148,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
 
   const verAvisosGenerales = () => {
     setViendoAvisosGenerales(true);
-    setDiaSeleccionado(''); // Deseleccionamos el día para mostrar solo la info general
+    setDiaSeleccionado(''); 
     if (window.innerWidth < 768) {
       setTimeout(() => {
         document.getElementById('panel-detalles')?.scrollIntoView({ behavior: 'smooth' });
@@ -212,13 +217,15 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     const estaSeleccionado = diaSeleccionado === fechaIteracion;
     const tieneAviso = avisosDelDia.length > 0;
     
+    // MAGIA UX: Solo destacamos el fondo amarillo si el aviso no ha pasado
+    const esAvisoVigenteHoyEnAdelante = tieneAviso && (fechaIteracion >= hoyLocalString);
+    
     const eventoPrincipal = eventosDelDia.length > 0 ? eventosDelDia[0] : null;
 
-    // Lógica de color de fondo de la celda
     let bgColor = 'transparent';
-    if (tieneAviso) bgColor = 'rgba(255, 193, 7, 0.1)'; // Prioridad: Aviso amarillo tenue
-    else if (notasDelDia.length > 0) bgColor = `${notasDelDia[0].color}15`; // Segundo: Nota personal tenue
-    else if (eventoPrincipal?.tipo === 'Vacaciones') bgColor = `${COLORES_OFICIALES.Vacaciones}15`; // Tercero: Vacaciones
+    if (esAvisoVigenteHoyEnAdelante) bgColor = 'rgba(255, 193, 7, 0.1)'; 
+    else if (notasDelDia.length > 0) bgColor = `${notasDelDia[0].color}15`; 
+    else if (eventoPrincipal?.tipo === 'Vacaciones') bgColor = `${COLORES_OFICIALES.Vacaciones}15`; 
 
     celdas.push(
       <div 
@@ -227,13 +234,14 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
         onClick={() => seleccionarDiaParaNota(fechaIteracion)}
         style={{ 
           backgroundColor: bgColor,
-          border: estaSeleccionado ? '2px solid var(--accent-blue)' : (tieneAviso ? '1px solid rgba(255, 193, 7, 0.5)' : '1px solid #e0e0e0'),
-          borderTop: eventoPrincipal ? `4px solid ${COLORES_OFICIALES[eventoPrincipal.tipo]}` : (tieneAviso ? '4px solid #FFC107' : '1px solid #e0e0e0')
+          border: estaSeleccionado ? '2px solid var(--accent-blue)' : (esAvisoVigenteHoyEnAdelante ? '1px solid rgba(255, 193, 7, 0.5)' : '1px solid #e0e0e0'),
+          borderTop: eventoPrincipal ? `4px solid ${COLORES_OFICIALES[eventoPrincipal.tipo]}` : (esAvisoVigenteHoyEnAdelante ? '4px solid #FFC107' : '1px solid #e0e0e0')
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
           
-          <div style={{ padding: '2px' }}>
+          <div style={{ padding: '4px' }}>
+            {/* El punto parpadeante se queda toda la duración del evento */}
             {tieneAviso && (
                <div title="¡Hay un aviso para este día!" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#FFC107', animation: 'avisoPulse 1.5s infinite' }}></div>
             )}
@@ -243,8 +251,8 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
             color: esHoy ? 'white' : '#333', 
             backgroundColor: esHoy ? 'var(--accent-blue)' : 'transparent',
             borderRadius: esHoy ? '50%' : '0',
-            width: esHoy ? '24px' : 'auto',
-            height: esHoy ? '24px' : 'auto',
+            width: esHoy ? '26px' : 'auto',
+            height: esHoy ? '26px' : 'auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -281,7 +289,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
       
       <style>{`
-        /* Optimizaciones Extremas para Móviles */
         .calendar-container {
           background-color: #F8F9FA;
           border-radius: 16px;
@@ -354,7 +361,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           align-items: start;
         }
         
-        /* Media Queries para Tablets y Móviles */
         @media (max-width: 900px) {
           .agenda-layout { grid-template-columns: 1fr; }
         }
@@ -368,7 +374,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           .cal-note-dot { width: 8px; height: 8px; }
         }
 
-        /* Animación y botones */
         @keyframes avisoPulse {
           0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
           70% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
@@ -414,7 +419,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.8rem', color: '#FFC107' }}>📅 Mi Agenda Escolar</h3>
             
-            {/* Campanita de Avisos Globales */}
             {avisosGlobales.length > 0 && (
               <TutorialTooltip mensaje="¡Tienes avisos activos! Toca la campana para leerlos." posicion="right">
                 <div className="bell-icon" onClick={verAvisosGenerales}>
@@ -458,7 +462,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           
           <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)', animation: 'fadeIn 0.2s' }}>
             
-            {/* VISTA DE AVISOS GENERALES (Campana) */}
             {viendoAvisosGenerales ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <h4 style={{ margin: '0 0 0.5rem 0', color: '#FFC107', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -469,7 +472,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
                     <h5 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{aviso.titulo}</h5>
                     <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{aviso.descripcion}</p>
                     <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#FFC107', fontWeight: 'bold' }}>
-                      Del {aviso.fechaInicio} al {aviso.fechaFin}
+                      Del {formatearFechaDisplay(aviso.fechaInicio)} al {formatearFechaDisplay(aviso.fechaFin)}
                     </div>
                   </div>
                 ))}
@@ -477,7 +480,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
               </div>
             ) : 
             
-            /* VISTA NORMAL DE DÍA SELECCIONADO */
             (
               <>
                 <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
@@ -491,7 +493,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     
-                    {/* Avisos del Día (Prioridad 1) */}
+                    {/* Avisos del Día (Prioridad 1) con Fechas */}
                     {avisosSeleccionados.map(aviso => (
                       <div key={aviso.id} style={{ padding: '1rem', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderRadius: '8px', border: '1px solid #FFC107' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
@@ -500,6 +502,9 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
                         </div>
                         <h5 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{aviso.titulo}</h5>
                         <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{aviso.descripcion}</p>
+                        <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#FFC107', fontWeight: 'bold' }}>
+                          Del {formatearFechaDisplay(aviso.fechaInicio)} al {formatearFechaDisplay(aviso.fechaFin)}
+                        </div>
                       </div>
                     ))}
 
@@ -566,7 +571,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
             )}
           </div>
 
-          {/* Leyenda Oficial para Referencia Rápida */}
+          {/* Leyenda Oficial */}
           <div style={{ backgroundColor: 'var(--bg-input)', padding: '1.2rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
             <h5 style={{ margin: '0 0 0.8rem 0', color: 'var(--text-muted)' }}>Simbología Oficial</h5>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem', fontSize: '0.8rem', color: 'var(--text-main)' }}>
