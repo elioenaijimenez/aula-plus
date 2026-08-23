@@ -57,6 +57,9 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
   const [fechaActual, setFechaActual] = useState(new Date());
   const [diaSeleccionado, setDiaSeleccionado] = useState<string>('');
   
+  // Estado para controlar la visibilidad del panel especial de avisos al tocar la campana
+  const [viendoAvisosGenerales, setViendoAvisosGenerales] = useState(false);
+
   const [textoNota, setTextoNota] = useState('');
   const [colorNota, setColorNota] = useState(COLORES_NOTAS[0].hex);
   const [guardando, setGuardando] = useState(false);
@@ -75,7 +78,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     const email = sessionData?.user?.email || sessionData?.email || '';
     setUserEmail(email);
 
-    // 1. Sincronización: Eventos Oficiales
     const qOficiales = query(collection(db, 'calendario_oficial'));
     const unsubOficiales = onSnapshot(qOficiales, (snapshot) => {
       const lista: EventoOficial[] = [];
@@ -83,13 +85,11 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
       setEventosOficiales(lista);
     });
 
-    // 2. Sincronización: Avisos Globales (Solo mantenemos los vigentes)
     const qAvisos = query(collection(db, 'calendario_avisos'));
     const unsubAvisos = onSnapshot(qAvisos, (snapshot) => {
       const lista: AvisoGlobal[] = [];
       snapshot.forEach(doc => {
         const aviso = { id: doc.id, ...doc.data() } as AvisoGlobal;
-        // El docente solo ve el aviso si aún no ha pasado la fecha de fin
         if (aviso.fechaFin >= hoyLocalString) {
           lista.push(aviso);
         }
@@ -97,7 +97,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
       setAvisosGlobales(lista);
     });
 
-    // 3. Sincronización: Notas Privadas
     if (email) {
       const qNotas = query(collection(db, 'teacher_notes_calendar'), where('docenteEmail', '==', email));
       const unsubNotas = onSnapshot(qNotas, (snapshot) => {
@@ -119,7 +118,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     };
   }, [hoyLocalString]);
 
-  // Lógica del Calendario
   const obtenerDiasDelMes = (año: number, mes: number) => new Date(año, mes + 1, 0).getDate();
   const obtenerPrimerDiaDelMes = (año: number, mes: number) => new Date(año, mes, 1).getDay();
 
@@ -134,7 +132,18 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
 
   const seleccionarDiaParaNota = (fechaAString: string) => {
     setDiaSeleccionado(fechaAString);
+    setViendoAvisosGenerales(false); // Cierra la vista general de avisos si toca un día
     setTextoNota(''); 
+    if (window.innerWidth < 768) {
+      setTimeout(() => {
+        document.getElementById('panel-detalles')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  };
+
+  const verAvisosGenerales = () => {
+    setViendoAvisosGenerales(true);
+    setDiaSeleccionado(''); // Deseleccionamos el día para mostrar solo la info general
     if (window.innerWidth < 768) {
       setTimeout(() => {
         document.getElementById('panel-detalles')?.scrollIntoView({ behavior: 'smooth' });
@@ -185,7 +194,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     });
   };
 
-  // Generar celdas del calendario
   const celdas = [];
   for (let i = 0; i < primerDia; i++) {
     celdas.push(<div key={`empty-${i}`} className="cal-cell empty"></div>);
@@ -202,8 +210,15 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     
     const esHoy = hoyLocalString === fechaIteracion;
     const estaSeleccionado = diaSeleccionado === fechaIteracion;
+    const tieneAviso = avisosDelDia.length > 0;
     
     const eventoPrincipal = eventosDelDia.length > 0 ? eventosDelDia[0] : null;
+
+    // Lógica de color de fondo de la celda
+    let bgColor = 'transparent';
+    if (tieneAviso) bgColor = 'rgba(255, 193, 7, 0.1)'; // Prioridad: Aviso amarillo tenue
+    else if (notasDelDia.length > 0) bgColor = `${notasDelDia[0].color}15`; // Segundo: Nota personal tenue
+    else if (eventoPrincipal?.tipo === 'Vacaciones') bgColor = `${COLORES_OFICIALES.Vacaciones}15`; // Tercero: Vacaciones
 
     celdas.push(
       <div 
@@ -211,17 +226,16 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
         className={`cal-cell ${estaSeleccionado ? 'selected' : ''}`}
         onClick={() => seleccionarDiaParaNota(fechaIteracion)}
         style={{ 
-          backgroundColor: notasDelDia.length > 0 ? `${notasDelDia[0].color}15` : (eventoPrincipal?.tipo === 'Vacaciones' ? `${COLORES_OFICIALES.Vacaciones}15` : 'transparent'),
-          border: estaSeleccionado ? '2px solid var(--accent-blue)' : '1px solid #e0e0e0',
-          borderTop: eventoPrincipal ? `4px solid ${COLORES_OFICIALES[eventoPrincipal.tipo]}` : '1px solid #e0e0e0'
+          backgroundColor: bgColor,
+          border: estaSeleccionado ? '2px solid var(--accent-blue)' : (tieneAviso ? '1px solid rgba(255, 193, 7, 0.5)' : '1px solid #e0e0e0'),
+          borderTop: eventoPrincipal ? `4px solid ${COLORES_OFICIALES[eventoPrincipal.tipo]}` : (tieneAviso ? '4px solid #FFC107' : '1px solid #e0e0e0')
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
           
-          {/* Indicador de Aviso Parpadeante */}
-          <div style={{ padding: '4px' }}>
-            {avisosDelDia.length > 0 && (
-               <div title="¡Hay un aviso para este día!" style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#FFC107', animation: 'avisoPulse 1.5s infinite' }}></div>
+          <div style={{ padding: '2px' }}>
+            {tieneAviso && (
+               <div title="¡Hay un aviso para este día!" style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#FFC107', animation: 'avisoPulse 1.5s infinite' }}></div>
             )}
           </div>
 
@@ -229,8 +243,8 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
             color: esHoy ? 'white' : '#333', 
             backgroundColor: esHoy ? 'var(--accent-blue)' : 'transparent',
             borderRadius: esHoy ? '50%' : '0',
-            width: esHoy ? '28px' : 'auto',
-            height: esHoy ? '28px' : 'auto',
+            width: esHoy ? '24px' : 'auto',
+            height: esHoy ? '24px' : 'auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -267,17 +281,21 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
       
       <style>{`
+        /* Optimizaciones Extremas para Móviles */
         .calendar-container {
           background-color: #F8F9FA;
           border-radius: 16px;
           padding: 1.5rem;
           color: #333;
           box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+          width: 100%;
+          overflow: hidden;
         }
         .cal-grid {
           display: grid;
           grid-template-columns: repeat(7, 1fr);
           gap: 4px;
+          width: 100%;
         }
         .cal-header-day {
           text-align: center;
@@ -290,12 +308,12 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           min-height: 90px;
           background: #fff;
           border-radius: 8px;
-          padding: 0.2rem;
+          padding: 0.4rem;
           cursor: pointer;
           transition: all 0.2s ease;
-          position: relative;
           display: flex;
           flex-direction: column;
+          overflow: hidden;
         }
         .cal-cell:hover:not(.empty) {
           box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -308,8 +326,8 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           z-index: 11;
         }
         .cal-cell.empty { background: transparent; border: none; cursor: default; }
-        .cal-number { font-size: 1.1rem; margin-bottom: 0.3rem; font-weight: 600; margin-left: auto; }
-        .cal-indicators { display: flex; flex-direction: column; gap: 4px; flex: 1; padding: 0 0.3rem; }
+        .cal-number { font-size: 1rem; margin-bottom: 0.2rem; font-weight: 600; margin-left: auto; }
+        .cal-indicators { display: flex; flex-direction: column; gap: 3px; flex: 1; margin-top: 2px; }
         .cal-badge.official {
           color: white;
           font-size: 0.65rem;
@@ -321,10 +339,10 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .cal-notes-wrapper { display: flex; gap: 4px; flex-wrap: wrap; margin-top: auto; padding-bottom: 0.3rem; }
+        .cal-notes-wrapper { display: flex; gap: 3px; flex-wrap: wrap; margin-top: auto; padding-bottom: 0.2rem; }
         .cal-note-dot {
-          width: 14px;
-          height: 14px;
+          width: 12px;
+          height: 12px;
           border-radius: 50%;
           box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
@@ -335,29 +353,77 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           gap: 1.5rem;
           align-items: start;
         }
+        
+        /* Media Queries para Tablets y Móviles */
         @media (max-width: 900px) {
-          .agenda-layout { 
-            grid-template-columns: 1fr; 
-          }
-          .cal-cell { min-height: 70px; padding: 0.1rem; }
-          .cal-badge.official { font-size: 0.55rem; }
-          .cal-number { font-size: 1rem; }
+          .agenda-layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+          .calendar-container { padding: 0.8rem; border-radius: 12px; }
+          .cal-grid { gap: 2px; }
+          .cal-header-day { font-size: 0.75rem; padding: 0.3rem 0; }
+          .cal-cell { min-height: 65px; padding: 0.2rem; border-radius: 6px; }
+          .cal-number { font-size: 0.85rem; }
+          .cal-badge.official { font-size: 0.5rem; padding: 1px 2px; letter-spacing: -0.5px; }
+          .cal-note-dot { width: 8px; height: 8px; }
         }
 
-        /* Animación para el aviso */
+        /* Animación y botones */
         @keyframes avisoPulse {
           0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
           70% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
           100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
+        .bell-icon {
+          font-size: 1.5rem;
+          cursor: pointer;
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.5rem;
+          background: rgba(255, 193, 7, 0.15);
+          border-radius: 50%;
+          border: 1px solid rgba(255, 193, 7, 0.5);
+          transition: transform 0.2s;
+        }
+        .bell-icon:hover { transform: scale(1.1); }
+        .bell-badge {
+          position: absolute;
+          top: -2px;
+          right: -2px;
+          background: #E91E63;
+          color: white;
+          font-size: 0.7rem;
+          font-weight: bold;
+          border-radius: 50%;
+          width: 18px;
+          height: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
       `}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', marginBottom: '1rem', padding: '0.3rem 0.8rem' }}>
             ← Volver al Inicio
           </button>
-          <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.8rem', color: '#FFC107' }}>📅 Mi Agenda Escolar</h3>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.8rem', color: '#FFC107' }}>📅 Mi Agenda Escolar</h3>
+            
+            {/* Campanita de Avisos Globales */}
+            {avisosGlobales.length > 0 && (
+              <TutorialTooltip mensaje="¡Tienes avisos activos! Toca la campana para leerlos." posicion="right">
+                <div className="bell-icon" onClick={verAvisosGenerales}>
+                  🔔
+                  <div className="bell-badge">{avisosGlobales.length}</div>
+                </div>
+              </TutorialTooltip>
+            )}
+          </div>
         </div>
       </div>
 
@@ -366,15 +432,15 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
         {/* PANEL PRINCIPAL: CALENDARIO */}
         <section className="calendar-container">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <h2 style={{ margin: 0, fontSize: '1.5rem', textTransform: 'capitalize' }}>
+            <h2 style={{ margin: 0, fontSize: '1.3rem', textTransform: 'capitalize' }}>
               {MESES[mesActual]} {añoActual}
             </h2>
             
             <TutorialTooltip mensaje="Navega entre los meses para revisar eventos futuros o pasados." posicion="bottom">
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => cambiarMes(-1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>◀ Mes Ant.</button>
-                <button onClick={() => setFechaActual(new Date())} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', border: 'none', padding: '0.5rem 1rem' }}>Hoy</button>
-                <button onClick={() => cambiarMes(1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>Sig. Mes ▶</button>
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                <button onClick={() => cambiarMes(-1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>◀ Ant.</button>
+                <button onClick={() => setFechaActual(new Date())} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', border: 'none', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>Hoy</button>
+                <button onClick={() => cambiarMes(1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>Sig. ▶</button>
               </div>
             </TutorialTooltip>
           </div>
@@ -387,91 +453,116 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           </div>
         </section>
 
-        {/* PANEL LATERAL: DETALLES DEL DÍA Y POST-ITS */}
+        {/* PANEL LATERAL: DETALLES DEL DÍA, POST-ITS O AVISOS GENERALES */}
         <aside id="panel-detalles" style={{ position: 'sticky', top: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)', animation: 'fadeIn 0.2s' }}>
-            <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
-              {diaSeleccionado ? formatoFechaPanel : 'Panel de Detalles'}
-            </h4>
             
-            {!diaSeleccionado ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
-                👆 Toca un día en el calendario para ver sus eventos o agregar una nota.
-              </p>
-            ) : (
+            {/* VISTA DE AVISOS GENERALES (Campana) */}
+            {viendoAvisosGenerales ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                
-                {/* Avisos Globales (Prioridad 1) */}
-                {avisosSeleccionados.map(aviso => (
-                  <div key={aviso.id} style={{ padding: '1rem', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderRadius: '8px', border: '1px solid #FFC107' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                      <span style={{ fontSize: '1.2rem' }}>🚨</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#FFC107' }}>AVISO IMPORTANTE</span>
-                    </div>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: '#FFC107', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🔔 Todos los Avisos Activos
+                </h4>
+                {avisosGlobales.map(aviso => (
+                  <div key={aviso.id} style={{ padding: '1rem', backgroundColor: 'rgba(255, 193, 7, 0.1)', borderRadius: '8px', borderLeft: '4px solid #FFC107' }}>
                     <h5 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{aviso.titulo}</h5>
-                    <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{aviso.descripcion}</p>
-                  </div>
-                ))}
-
-                {/* Eventos Oficiales del Día */}
-                {eventosSeleccionados.map(evt => (
-                  <div key={evt.id} style={{ padding: '0.8rem', backgroundColor: 'var(--bg-input)', borderRadius: '8px', borderLeft: `4px solid ${COLORES_OFICIALES[evt.tipo]}` }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: COLORES_OFICIALES[evt.tipo] }}>OFICIAL: {evt.tipo}</span>
-                    <p style={{ margin: '0.3rem 0 0 0', color: 'var(--text-main)', fontSize: '0.9rem' }}>{evt.titulo}</p>
-                  </div>
-                ))}
-
-                {/* Notas Personales del Día */}
-                {notasSeleccionadas.map(nota => (
-                  <div key={nota.id} style={{ padding: '0.8rem', backgroundColor: nota.color, borderRadius: '8px', color: '#000', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.7 }}>📌 MI POST-IT</span>
-                      <button onClick={() => borrarNota(nota.id)} style={{ background: 'none', border: 'none', color: '#000', cursor: 'pointer', fontWeight: 'bold', padding: 0 }} title="Borrar">✕</button>
+                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{aviso.descripcion}</p>
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#FFC107', fontWeight: 'bold' }}>
+                      Del {aviso.fechaInicio} al {aviso.fechaFin}
                     </div>
-                    <p style={{ margin: 0, fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{nota.texto}</p>
                   </div>
                 ))}
-
-                {eventosSeleccionados.length === 0 && notasSeleccionadas.length === 0 && avisosSeleccionados.length === 0 && (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, fontStyle: 'italic' }}>El día está libre.</p>
-                )}
-
-                <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '0.5rem 0' }} />
-
-                {/* Formulario de Nueva Nota */}
-                <TutorialTooltip mensaje="Elige un color para tu post-it y presiona Guardar. Se sincronizará en todos tus dispositivos." posicion="top" esBloque={true}>
-                  <form onSubmit={guardarNota} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Añadir recordatorio:</label>
-                    <textarea 
-                      required 
-                      value={textoNota} 
-                      onChange={e => setTextoNota(e.target.value)} 
-                      className="search-input" 
-                      style={{ resize: 'vertical', minHeight: '80px', width: '100%', backgroundColor: colorNota, color: '#000', border: 'none' }} 
-                      placeholder="Escribe aquí..."
-                    ></textarea>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        {COLORES_NOTAS.map(c => (
-                          <button 
-                            key={c.hex} 
-                            type="button" 
-                            onClick={() => setColorNota(c.hex)}
-                            style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: c.hex, border: colorNota === c.hex ? '2px solid white' : 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
-                            title={c.nombre}
-                          />
-                        ))}
-                      </div>
-                      <button type="submit" disabled={guardando} className="pill-btn" style={{ background: '#333', color: 'white', padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
-                        {guardando ? '...' : 'Guardar'}
-                      </button>
-                    </div>
-                  </form>
-                </TutorialTooltip>
-
+                <button onClick={() => setViendoAvisosGenerales(false)} className="pill-btn" style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', marginTop: '1rem' }}>Cerrar Avisos</button>
               </div>
+            ) : 
+            
+            /* VISTA NORMAL DE DÍA SELECCIONADO */
+            (
+              <>
+                <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
+                  {diaSeleccionado ? formatoFechaPanel : 'Panel de Detalles'}
+                </h4>
+                
+                {!diaSeleccionado ? (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '1rem 0' }}>
+                    👆 Toca un día en el calendario para ver sus eventos o agregar una nota.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    
+                    {/* Avisos del Día (Prioridad 1) */}
+                    {avisosSeleccionados.map(aviso => (
+                      <div key={aviso.id} style={{ padding: '1rem', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderRadius: '8px', border: '1px solid #FFC107' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                          <span style={{ fontSize: '1.2rem' }}>🚨</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#FFC107' }}>AVISO IMPORTANTE</span>
+                        </div>
+                        <h5 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{aviso.titulo}</h5>
+                        <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{aviso.descripcion}</p>
+                      </div>
+                    ))}
+
+                    {/* Eventos Oficiales del Día */}
+                    {eventosSeleccionados.map(evt => (
+                      <div key={evt.id} style={{ padding: '0.8rem', backgroundColor: 'var(--bg-input)', borderRadius: '8px', borderLeft: `4px solid ${COLORES_OFICIALES[evt.tipo]}` }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: COLORES_OFICIALES[evt.tipo] }}>OFICIAL: {evt.tipo}</span>
+                        <p style={{ margin: '0.3rem 0 0 0', color: 'var(--text-main)', fontSize: '0.9rem' }}>{evt.titulo}</p>
+                      </div>
+                    ))}
+
+                    {/* Notas Personales del Día */}
+                    {notasSeleccionadas.map(nota => (
+                      <div key={nota.id} style={{ padding: '0.8rem', backgroundColor: nota.color, borderRadius: '8px', color: '#000', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.7 }}>📌 MI POST-IT</span>
+                          <button onClick={() => borrarNota(nota.id)} style={{ background: 'none', border: 'none', color: '#000', cursor: 'pointer', fontWeight: 'bold', padding: 0 }} title="Borrar">✕</button>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{nota.texto}</p>
+                      </div>
+                    ))}
+
+                    {eventosSeleccionados.length === 0 && notasSeleccionadas.length === 0 && avisosSeleccionados.length === 0 && (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, fontStyle: 'italic' }}>El día está libre.</p>
+                    )}
+
+                    <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '0.5rem 0' }} />
+
+                    {/* Formulario de Nueva Nota */}
+                    <TutorialTooltip mensaje="Elige un color para tu post-it y presiona Guardar. Se sincronizará en todos tus dispositivos." posicion="top" esBloque={true}>
+                      <form onSubmit={guardarNota} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Añadir recordatorio:</label>
+                        <textarea 
+                          required 
+                          value={textoNota} 
+                          onChange={e => setTextoNota(e.target.value)} 
+                          className="search-input" 
+                          style={{ resize: 'vertical', minHeight: '80px', width: '100%', backgroundColor: colorNota, color: '#000', border: 'none' }} 
+                          placeholder="Escribe aquí..."
+                        ></textarea>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            {COLORES_NOTAS.map(c => (
+                              <button 
+                                key={c.hex} 
+                                type="button" 
+                                onClick={() => setColorNota(c.hex)}
+                                style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: c.hex, border: colorNota === c.hex ? '2px solid white' : 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
+                                title={c.nombre}
+                              />
+                            ))}
+                          </div>
+                          <button type="submit" disabled={guardando} className="pill-btn" style={{ background: '#333', color: 'white', padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                            {guardando ? '...' : 'Guardar'}
+                          </button>
+                        </div>
+                      </form>
+                    </TutorialTooltip>
+
+                  </div>
+                )}
+              </>
             )}
           </div>
 
