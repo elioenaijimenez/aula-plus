@@ -1,60 +1,92 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, setDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 
 export interface FechaOficial {
   id: string;
-  fecha: string; // Formato YYYY-MM-DD
-  fechaFin?: string; // Opcional para periodos
+  fecha: string; 
+  fechaFin?: string; 
   titulo: string;
   tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga' | 'Vacaciones';
 }
 
+export interface AvisoGlobal {
+  id: string;
+  fechaInicio: string;
+  fechaFin: string;
+  titulo: string;
+  descripcion: string;
+  createdAt?: any;
+}
+
 export const COLORES_OFICIALES = {
-  CTE: '#E91E63', // Rosa vibrante
-  Festivo: '#757575', // Gris (Suspensión)
-  Vacaciones: '#00BCD4', // Morado/Cian
-  Evaluacion: '#FF9800', // Naranja
-  InicioFin: '#4CAF50', // Verde
-  Descarga: '#9C27B0' // Morado oscuro
+  CTE: '#E91E63', 
+  Festivo: '#757575', 
+  Vacaciones: '#00BCD4', 
+  Evaluacion: '#FF9800', 
+  InicioFin: '#4CAF50', 
+  Descarga: '#9C27B0' 
 };
 
 export default function GestorCalendarioAdmin() {
-  const [fechas, setFechas] = useState<FechaOficial[]>([]);
+  const [tabActiva, setTabActiva] = useState<'oficiales' | 'avisos'>('oficiales');
   const [cargando, setCargando] = useState(true);
-  
+  const [guardando, setGuardando] = useState(false);
+
+  // Estados para Fechas Oficiales
+  const [fechas, setFechas] = useState<FechaOficial[]>([]);
   const [tipoDuracion, setTipoDuracion] = useState<'dia' | 'periodo'>('dia');
   const [nuevaFecha, setNuevaFecha] = useState('');
   const [nuevaFechaFin, setNuevaFechaFin] = useState('');
-  
   const [nuevoTitulo, setNuevoTitulo] = useState('');
   const [nuevoTipo, setNuevoTipo] = useState<FechaOficial['tipo']>('Festivo');
-  const [guardando, setGuardando] = useState(false);
+
+  // Estados para Avisos Globales
+  const [avisos, setAvisos] = useState<AvisoGlobal[]>([]);
+  const [avisoTitulo, setAvisoTitulo] = useState('');
+  const [avisoDesc, setAvisoDesc] = useState('');
+  const [avisoInicio, setAvisoInicio] = useState('');
+  const [avisoFin, setAvisoFin] = useState('');
+
+  // Fecha local para cálculos de vencimiento (Asegura que el corte sea a medianoche local)
+  const obtenerFechaLocalString = () => {
+    const fecha = new Date();
+    const offset = fecha.getTimezoneOffset() * 60000;
+    return (new Date(fecha.getTime() - offset)).toISOString().split('T')[0];
+  };
+  const hoyLocalString = obtenerFechaLocalString();
 
   useEffect(() => {
-    cargarFechas();
+    cargarDatos();
   }, []);
 
-  const cargarFechas = async () => {
+  const cargarDatos = async () => {
     setCargando(true);
     try {
-      const q = query(collection(db, 'calendario_oficial'));
-      const snap = await getDocs(q);
-      const lista: FechaOficial[] = [];
-      snap.forEach(d => {
-        lista.push({ id: d.id, ...d.data() } as FechaOficial);
-      });
-      // Ordenar cronológicamente
-      lista.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
-      setFechas(lista);
+      // 1. Cargar Fechas Oficiales
+      const qOficiales = query(collection(db, 'calendario_oficial'));
+      const snapOficiales = await getDocs(qOficiales);
+      const listaFechas: FechaOficial[] = [];
+      snapOficiales.forEach(d => listaFechas.push({ id: d.id, ...d.data() } as FechaOficial));
+      listaFechas.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+      setFechas(listaFechas);
+
+      // 2. Cargar Avisos Globales
+      const qAvisos = query(collection(db, 'calendario_avisos'), orderBy('createdAt', 'desc'));
+      const snapAvisos = await getDocs(qAvisos);
+      const listaAvisos: AvisoGlobal[] = [];
+      snapAvisos.forEach(d => listaAvisos.push({ id: d.id, ...d.data() } as AvisoGlobal));
+      setAvisos(listaAvisos);
+
     } catch (error) {
-      console.error("Error al cargar fechas oficiales:", error);
+      console.error("Error al cargar datos:", error);
     }
     setCargando(false);
   };
 
-  const guardarFecha = async (e: React.FormEvent) => {
+  // --- LÓGICA DE FECHAS OFICIALES ---
+  const guardarFechaOficial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevaFecha || !nuevoTitulo) return;
     if (tipoDuracion === 'periodo' && !nuevaFechaFin) return alert('Debes seleccionar una fecha de fin.');
@@ -62,19 +94,11 @@ export default function GestorCalendarioAdmin() {
     
     setGuardando(true);
     try {
-      // ID único basado en el tiempo para evitar sobrescribir si hay múltiples eventos el mismo día
       const idUnico = `evt_${Date.now()}`;
       const docRef = doc(db, 'calendario_oficial', idUnico);
       
-      const dataFecha: Omit<FechaOficial, 'id'> = {
-        fecha: nuevaFecha,
-        titulo: nuevoTitulo,
-        tipo: nuevoTipo
-      };
-      
-      if (tipoDuracion === 'periodo') {
-        dataFecha.fechaFin = nuevaFechaFin;
-      }
+      const dataFecha: Omit<FechaOficial, 'id'> = { fecha: nuevaFecha, titulo: nuevoTitulo, tipo: nuevoTipo };
+      if (tipoDuracion === 'periodo') dataFecha.fechaFin = nuevaFechaFin;
       
       await setDoc(docRef, dataFecha);
       
@@ -82,24 +106,17 @@ export default function GestorCalendarioAdmin() {
       nuevaLista.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
       
       setFechas(nuevaLista);
-      setNuevoTitulo('');
-      setNuevaFecha('');
-      setNuevaFechaFin('');
-      setTipoDuracion('dia');
+      setNuevoTitulo(''); setNuevaFecha(''); setNuevaFechaFin(''); setTipoDuracion('dia');
     } catch (error) {
       alert("Error al guardar la fecha oficial.");
     }
     setGuardando(false);
   };
 
-  const eliminarFecha = async (id: string) => {
-    if (window.confirm("¿Seguro que deseas eliminar este evento del calendario global?")) {
-      try {
-        await deleteDoc(doc(db, 'calendario_oficial', id));
-        setFechas(fechas.filter(f => f.id !== id));
-      } catch (error) {
-        alert("Error al eliminar la fecha.");
-      }
+  const eliminarFechaOficial = async (id: string) => {
+    if (window.confirm("¿Seguro que deseas eliminar este evento oficial?")) {
+      await deleteDoc(doc(db, 'calendario_oficial', id));
+      setFechas(fechas.filter(f => f.id !== id));
     }
   };
 
@@ -112,11 +129,46 @@ export default function GestorCalendarioAdmin() {
           await deleteDoc(doc(db, 'calendario_oficial', fecha.id));
         }
         setFechas([]);
-        alert("El calendario oficial ha sido reiniciado con éxito.");
+        alert("El calendario oficial ha sido reiniciado.");
       } catch (error) {
         alert("Hubo un error al limpiar el calendario.");
       }
       setCargando(false);
+    }
+  };
+
+  // --- LÓGICA DE AVISOS GLOBALES ---
+  const guardarAviso = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!avisoInicio || !avisoFin || !avisoTitulo || !avisoDesc) return;
+    if (avisoFin < avisoInicio) return alert("La fecha de término no puede ser antes de la fecha de inicio.");
+
+    setGuardando(true);
+    try {
+      const idUnico = `aviso_${Date.now()}`;
+      const docRef = doc(db, 'calendario_avisos', idUnico);
+      const dataAviso = {
+        fechaInicio: avisoInicio,
+        fechaFin: avisoFin,
+        titulo: avisoTitulo,
+        descripcion: avisoDesc,
+        createdAt: serverTimestamp()
+      };
+
+      await setDoc(docRef, dataAviso);
+      setAvisos([{ id: idUnico, ...dataAviso }, ...avisos]);
+      
+      setAvisoTitulo(''); setAvisoDesc(''); setAvisoInicio(''); setAvisoFin('');
+    } catch (error) {
+      alert("Error al publicar el aviso.");
+    }
+    setGuardando(false);
+  };
+
+  const eliminarAviso = async (id: string) => {
+    if (window.confirm("¿Seguro que deseas eliminar este aviso permanentemente?")) {
+      await deleteDoc(doc(db, 'calendario_avisos', id));
+      setAvisos(avisos.filter(a => a.id !== id));
     }
   };
 
@@ -125,96 +177,211 @@ export default function GestorCalendarioAdmin() {
     return `${day}/${month}/${year}`;
   };
 
+  // Filtros automáticos por vigencia
+  const avisosVigentes = avisos.filter(a => a.fechaFin >= hoyLocalString);
+  const avisosPasados = avisos.filter(a => a.fechaFin < hoyLocalString);
+
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
-      <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', marginBottom: '2rem' }}>
-        <h3 style={{ margin: '0 0 1.5rem 0', color: 'var(--accent-blue)' }}>📅 Configurar Días Oficiales</h3>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Añade los CTE, días festivos y evaluaciones. Los periodos vacacionales pintarán todos los días seleccionados en la agenda del docente.</p>
-        
-        <form onSubmit={guardarFecha} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* Fila 1: Tipo y Título */}
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Clasificación</label>
-              <select value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value as any)} className="search-input" style={{ borderLeft: `4px solid ${COLORES_OFICIALES[nuevoTipo]}` }}>
-                <option value="Festivo">Festivo / Suspensión</option>
-                <option value="Vacaciones">Receso / Vacaciones</option>
-                <option value="CTE">CTE / Fase Intensiva</option>
-                <option value="Evaluacion">Evaluación / Boletas</option>
-                <option value="Descarga">Descarga Administrativa</option>
-                <option value="InicioFin">Inicio / Fin de Clases</option>
-              </select>
-            </div>
-            <div style={{ flex: 2, minWidth: '200px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Título del Evento Oficial</label>
-              <input type="text" required placeholder="Ej. Consejo Técnico Escolar - Fase Intensiva" value={nuevoTitulo} onChange={e => setNuevoTitulo(e.target.value)} className="search-input" />
-            </div>
+      
+      {/* NAVEGACIÓN INTERNA */}
+      <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+        <button 
+          onClick={() => setTabActiva('oficiales')} 
+          style={{ background: 'none', border: 'none', fontSize: '1.2rem', fontWeight: tabActiva === 'oficiales' ? 'bold' : 'normal', color: tabActiva === 'oficiales' ? 'var(--accent-blue)' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+        >
+          📅 Días Oficiales
+        </button>
+        <button 
+          onClick={() => setTabActiva('avisos')} 
+          style={{ background: 'none', border: 'none', fontSize: '1.2rem', fontWeight: tabActiva === 'avisos' ? 'bold' : 'normal', color: tabActiva === 'avisos' ? '#FFC107' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+        >
+          🚨 Avisos Importantes
+        </button>
+      </div>
+
+      {tabActiva === 'oficiales' && (
+        <div style={{ animation: 'fadeIn 0.3s' }}>
+          <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)', marginBottom: '2rem' }}>
+            <h3 style={{ margin: '0 0 1.5rem 0', color: 'var(--accent-blue)' }}>Configurar Calendario Base</h3>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Añade los CTE, días festivos y evaluaciones. Los periodos vacacionales pintarán todos los días seleccionados en la agenda del docente.</p>
+            
+            <form onSubmit={guardarFechaOficial} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Clasificación</label>
+                  <select value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value as any)} className="search-input" style={{ borderLeft: `4px solid ${COLORES_OFICIALES[nuevoTipo]}` }}>
+                    <option value="Festivo">Festivo / Suspensión</option>
+                    <option value="Vacaciones">Receso / Vacaciones</option>
+                    <option value="CTE">CTE / Fase Intensiva</option>
+                    <option value="Evaluacion">Evaluación / Boletas</option>
+                    <option value="Descarga">Descarga Administrativa</option>
+                    <option value="InicioFin">Inicio / Fin de Clases</option>
+                  </select>
+                </div>
+                <div style={{ flex: 2, minWidth: '200px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Título del Evento Oficial</label>
+                  <input type="text" required placeholder="Ej. Consejo Técnico Escolar - Fase Intensiva" value={nuevoTitulo} onChange={e => setNuevoTitulo(e.target.value)} className="search-input" />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Duración del Evento</label>
+                  <select value={tipoDuracion} onChange={e => setTipoDuracion(e.target.value as any)} className="search-input">
+                    <option value="dia">Un solo día</option>
+                    <option value="periodo">Periodo (Rango de fechas)</option>
+                  </select>
+                </div>
+
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>{tipoDuracion === 'periodo' ? 'Fecha de Inicio' : 'Fecha'}</label>
+                  <input type="date" required value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} className="search-input" />
+                </div>
+
+                {tipoDuracion === 'periodo' && (
+                  <div style={{ flex: 1, minWidth: '150px', animation: 'fadeIn 0.2s' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Fecha de Fin</label>
+                    <input type="date" required value={nuevaFechaFin} onChange={e => setNuevaFechaFin(e.target.value)} className="search-input" />
+                  </div>
+                )}
+
+                <button type="submit" disabled={guardando} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', height: 'fit-content', padding: '0.8rem 2rem' }}>
+                  {guardando ? 'Guardando...' : '➕ Añadir al Calendario'}
+                </button>
+              </div>
+            </form>
           </div>
 
-          {/* Fila 2: Fechas y Botón */}
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Duración del Evento</label>
-              <select value={tipoDuracion} onChange={e => setTipoDuracion(e.target.value as any)} className="search-input">
-                <option value="dia">Un solo día</option>
-                <option value="periodo">Periodo (Rango de fechas)</option>
-              </select>
+          <div style={{ backgroundColor: 'var(--bg-app)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h3 style={{ margin: 0 }}>Eventos Oficiales Guardados ({fechas.length})</h3>
+              <TutorialTooltip mensaje="Utiliza este botón al final del ciclo escolar para vaciar el calendario y empezar el siguiente año limpio." posicion="left">
+                <button onClick={borrarTodoElCalendario} className="pill-btn" style={{ background: 'transparent', border: '1px solid var(--accent-red)', color: 'var(--accent-red)' }}>
+                  ⚠️ Reiniciar Calendario Oficial
+                </button>
+              </TutorialTooltip>
             </div>
 
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>{tipoDuracion === 'periodo' ? 'Fecha de Inicio' : 'Fecha'}</label>
-              <input type="date" required value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} className="search-input" />
-            </div>
-
-            {tipoDuracion === 'periodo' && (
-              <div style={{ flex: 1, minWidth: '150px', animation: 'fadeIn 0.2s' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Fecha de Fin</label>
-                <input type="date" required value={nuevaFechaFin} onChange={e => setNuevaFechaFin(e.target.value)} className="search-input" />
+            {cargando ? <div className="loader"></div> : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+                {fechas.length === 0 ? (
+                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay fechas oficiales configuradas.</div>
+                ) : (
+                  fechas.map(f => (
+                    <div key={f.id} className="activity-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: 0, borderLeft: `4px solid ${COLORES_OFICIALES[f.tipo]}` }}>
+                      <div>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: COLORES_OFICIALES[f.tipo], textTransform: 'uppercase' }}>{f.tipo}</span>
+                        <h4 style={{ margin: '0.2rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{f.titulo}</h4>
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                          {f.fechaFin 
+                            ? `${formatearFechaDisplay(f.fecha)} al ${formatearFechaDisplay(f.fechaFin)}`
+                            : formatearFechaDisplay(f.fecha)}
+                        </p>
+                      </div>
+                      <button onClick={() => eliminarFechaOficial(f.id)} className="pill-btn" style={{ padding: '0.5rem', background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none' }} title="Eliminar">🗑</button>
+                    </div>
+                  ))
+                )}
               </div>
             )}
-
-            <button type="submit" disabled={guardando} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', height: 'fit-content', padding: '0.8rem 2rem' }}>
-              {guardando ? 'Guardando...' : '➕ Añadir al Calendario'}
-            </button>
           </div>
-
-        </form>
-      </div>
-
-      <div style={{ backgroundColor: 'var(--bg-app)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <h3 style={{ margin: 0 }}>Eventos Oficiales Guardados ({fechas.length})</h3>
-          <TutorialTooltip mensaje="Utiliza este botón al final del ciclo escolar para vaciar el calendario y empezar el siguiente año limpio." posicion="left">
-            <button onClick={borrarTodoElCalendario} className="pill-btn" style={{ background: 'transparent', border: '1px solid var(--accent-red)', color: 'var(--accent-red)' }}>
-              ⚠️ Reiniciar Calendario
-            </button>
-          </TutorialTooltip>
         </div>
+      )}
 
-        {cargando ? <div className="loader"></div> : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-            {fechas.length === 0 ? (
-               <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay fechas oficiales configuradas.</div>
-            ) : (
-              fechas.map(f => (
-                <div key={f.id} className="activity-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: 0, borderLeft: `4px solid ${COLORES_OFICIALES[f.tipo]}` }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: COLORES_OFICIALES[f.tipo], textTransform: 'uppercase' }}>{f.tipo}</span>
-                    <h4 style={{ margin: '0.2rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{f.titulo}</h4>
-                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      {f.fechaFin 
-                        ? `${formatearFechaDisplay(f.fecha)} al ${formatearFechaDisplay(f.fechaFin)}`
-                        : formatearFechaDisplay(f.fecha)}
-                    </p>
-                  </div>
-                  <button onClick={() => eliminarFecha(f.id)} className="pill-btn" style={{ padding: '0.5rem', background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none' }} title="Eliminar">🗑</button>
+      {tabActiva === 'avisos' && (
+        <div style={{ animation: 'fadeIn 0.3s' }}>
+          <div style={{ backgroundColor: 'rgba(255, 193, 7, 0.05)', padding: '2rem', borderRadius: '24px', border: '1px solid rgba(255, 193, 7, 0.3)', marginBottom: '2rem' }}>
+            <h3 style={{ margin: '0 0 1.5rem 0', color: '#FFC107' }}>🚨 Emitir Nuevo Aviso</h3>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Los avisos parpadearán en el calendario de los docentes y desaparecerán automáticamente a medianoche del día de término.</p>
+            
+            <form onSubmit={guardarAviso} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Título del Aviso</label>
+                  <input type="text" required placeholder="Ej. Evento Día de Muertos TEC 5" value={avisoTitulo} onChange={e => setAvisoTitulo(e.target.value)} className="search-input" style={{ borderLeft: '4px solid #FFC107' }} />
                 </div>
-              ))
-            )}
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Inicio de Vigencia</label>
+                  <input type="date" required value={avisoInicio} onChange={e => setAvisoInicio(e.target.value)} className="search-input" />
+                </div>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Término de Vigencia</label>
+                  <input type="date" required value={avisoFin} onChange={e => setAvisoFin(e.target.value)} className="search-input" />
+                </div>
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>Especificaciones o detalles (Horarios, ubicaciones, etc.)</label>
+                <textarea required placeholder="Detalla aquí la información del aviso..." value={avisoDesc} onChange={e => setAvisoDesc(e.target.value)} className="search-input" style={{ resize: 'vertical', minHeight: '80px', width: '100%' }}></textarea>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button type="submit" disabled={guardando} className="pill-btn" style={{ background: '#FFC107', color: '#000', padding: '0.8rem 2rem', fontWeight: 'bold' }}>
+                  {guardando ? 'Publicando...' : '📢 Emitir Aviso Global'}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
+            {/* AVISOS VIGENTES */}
+            <div style={{ backgroundColor: 'var(--bg-app)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
+              <h4 style={{ margin: '0 0 1.5rem 0', color: '#4CAF50', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#4CAF50', borderRadius: '50%', animation: 'pulse 2s infinite' }}></span>
+                Avisos Vigentes ({avisosVigentes.length})
+              </h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {avisosVigentes.length === 0 ? <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.9rem' }}>No hay avisos circulando actualmente.</p> : null}
+                {avisosVigentes.map(a => (
+                  <div key={a.id} className="activity-card" style={{ margin: 0, borderLeft: '4px solid #FFC107', backgroundColor: 'var(--bg-panel)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <h5 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1.05rem' }}>{a.titulo}</h5>
+                      <button onClick={() => eliminarAviso(a.id)} style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer' }} title="Borrar">🗑</button>
+                    </div>
+                    <p style={{ margin: '0 0 0.8rem 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{a.descripcion}</p>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#FFC107', backgroundColor: 'rgba(255, 193, 7, 0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px', display: 'inline-block' }}>
+                      Vence el: {formatearFechaDisplay(a.fechaFin)} a las 23:59
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* AVISOS PASADOS */}
+            <div style={{ backgroundColor: 'var(--bg-app)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)', opacity: 0.8 }}>
+              <h4 style={{ margin: '0 0 1.5rem 0', color: 'var(--text-muted)' }}>🗄️ Avisos Vencidos ({avisosPasados.length})</h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {avisosPasados.length === 0 ? <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.9rem' }}>No hay historial de avisos.</p> : null}
+                {avisosPasados.map(a => (
+                  <div key={a.id} className="activity-card" style={{ margin: 0, borderLeft: '4px solid var(--text-muted)', backgroundColor: 'var(--bg-panel)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <h5 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1.05rem', textDecoration: 'line-through' }}>{a.titulo}</h5>
+                      <button onClick={() => eliminarAviso(a.id)} style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer' }} title="Borrar">🗑</button>
+                    </div>
+                    <p style={{ margin: '0 0 0.8rem 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{a.descripcion}</p>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Finalizó el: {formatearFechaDisplay(a.fechaFin)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* Animación de pulso para el indicador de vigentes */}
+      <style>{`
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4); }
+          70% { box-shadow: 0 0 0 6px rgba(76, 175, 80, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -12,6 +12,14 @@ interface EventoOficial {
   tipo: 'CTE' | 'Festivo' | 'Evaluacion' | 'InicioFin' | 'Descarga' | 'Vacaciones';
 }
 
+interface AvisoGlobal {
+  id: string;
+  fechaInicio: string;
+  fechaFin: string;
+  titulo: string;
+  descripcion: string;
+}
+
 interface NotaPersonal {
   id: string;
   fecha: string;
@@ -43,16 +51,23 @@ const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', '
 export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }) {
   const [userEmail, setUserEmail] = useState('');
   const [eventosOficiales, setEventosOficiales] = useState<EventoOficial[]>([]);
+  const [avisosGlobales, setAvisosGlobales] = useState<AvisoGlobal[]>([]);
   const [notasPersonales, setNotasPersonales] = useState<NotaPersonal[]>([]);
   
-  // Controles del calendario
   const [fechaActual, setFechaActual] = useState(new Date());
   const [diaSeleccionado, setDiaSeleccionado] = useState<string>('');
   
-  // Formulario Post-it
   const [textoNota, setTextoNota] = useState('');
   const [colorNota, setColorNota] = useState(COLORES_NOTAS[0].hex);
   const [guardando, setGuardando] = useState(false);
+
+  // Obtener fecha local estricta
+  const obtenerFechaLocalString = (fecha: Date) => {
+    const offset = fecha.getTimezoneOffset() * 60000;
+    return (new Date(fecha.getTime() - offset)).toISOString().split('T')[0];
+  };
+
+  const hoyLocalString = obtenerFechaLocalString(new Date());
 
   useEffect(() => {
     const sessionLocal = localStorage.getItem('aulaPlusSession');
@@ -60,7 +75,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     const email = sessionData?.user?.email || sessionData?.email || '';
     setUserEmail(email);
 
-    // 1. Sincronización en Tiempo Real: Eventos Oficiales
+    // 1. Sincronización: Eventos Oficiales
     const qOficiales = query(collection(db, 'calendario_oficial'));
     const unsubOficiales = onSnapshot(qOficiales, (snapshot) => {
       const lista: EventoOficial[] = [];
@@ -68,7 +83,21 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
       setEventosOficiales(lista);
     });
 
-    // 2. Sincronización en Tiempo Real: Notas Privadas
+    // 2. Sincronización: Avisos Globales (Solo mantenemos los vigentes)
+    const qAvisos = query(collection(db, 'calendario_avisos'));
+    const unsubAvisos = onSnapshot(qAvisos, (snapshot) => {
+      const lista: AvisoGlobal[] = [];
+      snapshot.forEach(doc => {
+        const aviso = { id: doc.id, ...doc.data() } as AvisoGlobal;
+        // El docente solo ve el aviso si aún no ha pasado la fecha de fin
+        if (aviso.fechaFin >= hoyLocalString) {
+          lista.push(aviso);
+        }
+      });
+      setAvisosGlobales(lista);
+    });
+
+    // 3. Sincronización: Notas Privadas
     if (email) {
       const qNotas = query(collection(db, 'teacher_notes_calendar'), where('docenteEmail', '==', email));
       const unsubNotas = onSnapshot(qNotas, (snapshot) => {
@@ -79,22 +108,16 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
       
       return () => {
         unsubOficiales();
+        unsubAvisos();
         unsubNotas();
       };
     }
 
-    return () => unsubOficiales();
-  }, []);
-
-  // Función para obtener la fecha local estricta (evita el desfase por zona horaria)
-  const obtenerFechaLocalString = (fecha: Date) => {
-    // Formato YYYY-MM-DD forzado a la zona horaria del dispositivo
-    const offset = fecha.getTimezoneOffset() * 60000;
-    const localISOTime = (new Date(fecha.getTime() - offset)).toISOString().split('T')[0];
-    return localISOTime;
-  };
-
-  const hoyLocalString = obtenerFechaLocalString(new Date());
+    return () => {
+      unsubOficiales();
+      unsubAvisos();
+    };
+  }, [hoyLocalString]);
 
   // Lógica del Calendario
   const obtenerDiasDelMes = (año: number, mes: number) => new Date(año, mes + 1, 0).getDate();
@@ -111,7 +134,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
 
   const seleccionarDiaParaNota = (fechaAString: string) => {
     setDiaSeleccionado(fechaAString);
-    setTextoNota(''); // Limpia el form al tocar otro día
+    setTextoNota(''); 
     if (window.innerWidth < 768) {
       setTimeout(() => {
         document.getElementById('panel-detalles')?.scrollIntoView({ behavior: 'smooth' });
@@ -133,7 +156,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
         createdAt: serverTimestamp()
       });
       setTextoNota('');
-      setDiaSeleccionado(''); // Desactiva el form obligando a tocar otra fecha
+      setDiaSeleccionado(''); 
     } catch (error) {
       alert("Error al guardar la nota.");
     }
@@ -146,7 +169,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     }
   };
 
-  // Función para determinar si una fecha iterada cae dentro de un periodo oficial
   const verificarEventosDelDia = (fechaIteracion: string) => {
     return eventosOficiales.filter(evento => {
       if (!evento.fechaFin) {
@@ -154,6 +176,12 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
       } else {
         return fechaIteracion >= evento.fecha && fechaIteracion <= evento.fechaFin; 
       }
+    });
+  };
+
+  const verificarAvisosDelDia = (fechaIteracion: string) => {
+    return avisosGlobales.filter(aviso => {
+       return fechaIteracion >= aviso.fechaInicio && fechaIteracion <= aviso.fechaFin;
     });
   };
 
@@ -169,6 +197,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     const fechaIteracion = `${añoActual}-${mesStr}-${diaStr}`;
     
     const eventosDelDia = verificarEventosDelDia(fechaIteracion);
+    const avisosDelDia = verificarAvisosDelDia(fechaIteracion);
     const notasDelDia = notasPersonales.filter(n => n.fecha === fechaIteracion);
     
     const esHoy = hoyLocalString === fechaIteracion;
@@ -187,18 +216,28 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           borderTop: eventoPrincipal ? `4px solid ${COLORES_OFICIALES[eventoPrincipal.tipo]}` : '1px solid #e0e0e0'
         }}
       >
-        <span className="cal-number" style={{ 
-          color: esHoy ? 'white' : '#333', 
-          backgroundColor: esHoy ? 'var(--accent-blue)' : 'transparent',
-          borderRadius: esHoy ? '50%' : '0',
-          width: esHoy ? '28px' : 'height',
-          height: esHoy ? '28px' : 'auto',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          {d}
-        </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+          
+          {/* Indicador de Aviso Parpadeante */}
+          <div style={{ padding: '4px' }}>
+            {avisosDelDia.length > 0 && (
+               <div title="¡Hay un aviso para este día!" style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#FFC107', animation: 'avisoPulse 1.5s infinite' }}></div>
+            )}
+          </div>
+
+          <span className="cal-number" style={{ 
+            color: esHoy ? 'white' : '#333', 
+            backgroundColor: esHoy ? 'var(--accent-blue)' : 'transparent',
+            borderRadius: esHoy ? '50%' : '0',
+            width: esHoy ? '28px' : 'auto',
+            height: esHoy ? '28px' : 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {d}
+          </span>
+        </div>
         
         <div className="cal-indicators">
           {eventoPrincipal && (
@@ -220,6 +259,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
   }
 
   const eventosSeleccionados = diaSeleccionado ? verificarEventosDelDia(diaSeleccionado) : [];
+  const avisosSeleccionados = diaSeleccionado ? verificarAvisosDelDia(diaSeleccionado) : [];
   const notasSeleccionadas = diaSeleccionado ? notasPersonales.filter(n => n.fecha === diaSeleccionado) : [];
   const formatoFechaPanel = diaSeleccionado ? new Date(diaSeleccionado + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Selecciona un día';
 
@@ -250,7 +290,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           min-height: 90px;
           background: #fff;
           border-radius: 8px;
-          padding: 0.5rem;
+          padding: 0.2rem;
           cursor: pointer;
           transition: all 0.2s ease;
           position: relative;
@@ -268,8 +308,8 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           z-index: 11;
         }
         .cal-cell.empty { background: transparent; border: none; cursor: default; }
-        .cal-number { font-size: 1.1rem; align-self: flex-end; margin-bottom: 0.3rem; font-weight: 600; }
-        .cal-indicators { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+        .cal-number { font-size: 1.1rem; margin-bottom: 0.3rem; font-weight: 600; margin-left: auto; }
+        .cal-indicators { display: flex; flex-direction: column; gap: 4px; flex: 1; padding: 0 0.3rem; }
         .cal-badge.official {
           color: white;
           font-size: 0.65rem;
@@ -281,7 +321,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .cal-notes-wrapper { display: flex; gap: 4px; flex-wrap: wrap; margin-top: auto; }
+        .cal-notes-wrapper { display: flex; gap: 4px; flex-wrap: wrap; margin-top: auto; padding-bottom: 0.3rem; }
         .cal-note-dot {
           width: 14px;
           height: 14px;
@@ -299,9 +339,16 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           .agenda-layout { 
             grid-template-columns: 1fr; 
           }
-          .cal-cell { min-height: 70px; padding: 0.3rem; }
+          .cal-cell { min-height: 70px; padding: 0.1rem; }
           .cal-badge.official { font-size: 0.55rem; }
           .cal-number { font-size: 1rem; }
+        }
+
+        /* Animación para el aviso */
+        @keyframes avisoPulse {
+          0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+          70% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
       `}</style>
 
@@ -355,6 +402,18 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 
+                {/* Avisos Globales (Prioridad 1) */}
+                {avisosSeleccionados.map(aviso => (
+                  <div key={aviso.id} style={{ padding: '1rem', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderRadius: '8px', border: '1px solid #FFC107' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                      <span style={{ fontSize: '1.2rem' }}>🚨</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#FFC107' }}>AVISO IMPORTANTE</span>
+                    </div>
+                    <h5 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1rem' }}>{aviso.titulo}</h5>
+                    <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{aviso.descripcion}</p>
+                  </div>
+                ))}
+
                 {/* Eventos Oficiales del Día */}
                 {eventosSeleccionados.map(evt => (
                   <div key={evt.id} style={{ padding: '0.8rem', backgroundColor: 'var(--bg-input)', borderRadius: '8px', borderLeft: `4px solid ${COLORES_OFICIALES[evt.tipo]}` }}>
@@ -374,7 +433,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
                   </div>
                 ))}
 
-                {eventosSeleccionados.length === 0 && notasSeleccionadas.length === 0 && (
+                {eventosSeleccionados.length === 0 && notasSeleccionadas.length === 0 && avisosSeleccionados.length === 0 && (
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, fontStyle: 'italic' }}>El día está libre.</p>
                 )}
 
