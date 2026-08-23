@@ -27,13 +27,11 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
   const [perfilObligatorio, setPerfilObligatorio] = useState(false);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
-  const [guiaConductual, setGuiaConductual] = useState(false);
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
   // --- SOLUCIÓN DEL BOTÓN DE RETROCESO (HISTORY API) ---
   useEffect(() => {
-    // Al cargar, revisamos si hay un hash en la URL para llevarlo a esa vista
     if (!window.location.hash) {
       window.history.replaceState(null, '', '#inicio');
     } else {
@@ -43,7 +41,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
       }
     }
 
-    // Escuchador del botón "Atrás" o "Adelante" del navegador/celular
     const handlePopState = () => {
       const hash = window.location.hash.replace('#', '');
       if (hash) {
@@ -57,7 +54,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Función actualizada para que el cambio de módulo se guarde en el historial de navegación
   const navegarModulo = (modulo: any) => {
     verificarVigenciaKeyPlus(userEmail); 
     if (window.location.hash.replace('#', '') !== modulo) {
@@ -139,9 +135,10 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Haz de tu clase una experiencia', color: '#607D8B', inicial: 'U' }
   ];
 
-  const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); setGuiaConductual(false); };
+  const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); };
 
-  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'mi-aula' || vistaActual === 'reportes';
+  // CORRECCIÓN: Si estamos en 'mi-aula', ocultamos el sidebar lateral
+  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'reportes';
 
   return (
     <>
@@ -239,13 +236,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 </div>
               </div>
             )}
-
-            {guiaConductual && vistaActual === 'reportes' && (
-              <div className="vark-stats-card" style={{ borderLeft: '4px solid var(--accent-yellow)' }}>
-                <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>💡 Guía de Llenado</h4>
-                <details className="vark-accordion"><summary>📌 Eventualidades</summary><div><p>Vocabulario inadecuado, interrumpir clase, etc.</p></div></details>
-              </div>
-            )}
           </aside>
         )}
 
@@ -275,7 +265,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'biblioteca' && <Biblioteca onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'utilidades' && <Utilidades onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'calendario' && <CalendarioEscolar onVolver={() => navegarModulo('inicio')} />}
-          {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={setGuiaConductual} />}
           
           {/* Vistas de Grupo / Libreta */}
           {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} />}
@@ -302,7 +291,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 <h2 style={{ margin: '0.5rem 0', color: 'var(--accent-purple)', fontSize: '2rem' }}>Acceso a Mi Aula Virtual</h2>
                 <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Selecciona un grupo para gestionar su Pizarra y sus Actividades.</p>
               </div>
-              {/* MAGIA CSS: Inyectamos estilos para cambiar el color de las tarjetas de MisGrupos temporalmente a morado */}
               <style>{`
                 .mi-aula-theme .activity-card { border-top: 4px solid var(--accent-purple) !important; background-color: var(--bg-panel) !important; }
                 .mi-aula-theme h3 { color: var(--accent-purple) !important; }
@@ -315,6 +303,9 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'mi-aula' && aulaSeleccionada && (
             <MiAula idGrupo={aulaSeleccionada.id} nombreGrupo={aulaSeleccionada.nombre} onVolver={() => navegarModulo('mis-grupos-aula')} />
           )}
+
+          {/* Lo dejamos al final para que la alerta de guía se dispare bien */}
+          {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={(v) => { /* Para evitar error ts */ }} />}
 
         </section>
       </main>

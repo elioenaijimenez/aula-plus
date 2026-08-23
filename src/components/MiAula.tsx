@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc, getDocs, where, orderBy } from 'firebase/firestore';
+// CORRECCIÓN: Agregamos setDoc a la importación
+import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, getDoc, getDocs, where, orderBy, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import CalificarEvidencia from './CalificarEvidencia';
 import TutorialTooltip from './TutorialTooltip';
@@ -69,7 +70,9 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
   // Estados Generales
   const [vista, setVista] = useState<'panel' | 'formulario' | 'calificar'>('panel');
   const [tab, setTab] = useState<'actividades' | 'biblioteca' | 'drive'>('actividades');
-  const [userEmail, setUserEmail] = useState(() => {
+  
+  // CORRECCIÓN: Quitamos setUserEmail porque no se usa para modificar el estado, solo lo leemos.
+  const [userEmail] = useState(() => {
     const sessionLocal = localStorage.getItem('aulaPlusSession');
     return sessionLocal ? (JSON.parse(sessionLocal)?.user?.email || JSON.parse(sessionLocal)?.email || '') : '';
   });
@@ -113,8 +116,11 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
       const refGrupo = doc(db, 'groups', idGrupo);
       const docSnap = await getDoc(refGrupo);
       if (docSnap.exists()) {
-        if (docSnap.data().pizarraCode) setPizarraCode(docSnap.data().pizarraCode);
-        else {
+        const data = docSnap.data();
+        if (data.pizarraCode) {
+          setPizarraCode(data.pizarraCode);
+        } else {
+          // Genera una clave aleatoria corta (ej. AULA-Y6T9)
           const newCode = 'AULA-' + Math.random().toString(36).substring(2, 6).toUpperCase();
           await updateDoc(refGrupo, { pizarraCode: newCode });
           setPizarraCode(newCode);
@@ -128,6 +134,7 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
     const desuscribirActs = onSnapshot(qActs, (snapshot) => {
       const lista: Evidencia[] = [];
       snapshot.forEach(doc => lista.push({ id: doc.id, ...doc.data() } as Evidencia));
+      
       lista.sort((a, b) => {
         const comp = a.fechaActividad.localeCompare(b.fechaActividad);
         if (comp === 0) {
@@ -137,9 +144,13 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
         }
         return comp;
       });
-      setEvidencias(lista.map((ev, index) => ({ ...ev, numero: index + 1, trimestre: ev.trimestre || '1' })));
+      const listaNumerada = lista.map((ev, index) => ({ ...ev, numero: index + 1, trimestre: ev.trimestre || '1' }));
+      setEvidencias(listaNumerada);
     });
+    return () => desuscribirActs();
+  }, [idGrupo]);
 
+  useEffect(() => {
     // 3. Cargar Biblioteca Favoritos y Drive Personal
     const fetchRecursos = async () => {
       setCargandoRecursos(true);
@@ -166,9 +177,7 @@ export default function MiAula({ idGrupo, nombreGrupo, onVolver }: { idGrupo: st
       setCargandoRecursos(false);
     };
     fetchRecursos();
-
-    return () => desuscribirActs();
-  }, [idGrupo, userEmail]);
+  }, [userEmail]);
 
   // --- LÓGICA ACTIVIDADES ---
   const abrirFormulario = (ev?: Evidencia) => {
