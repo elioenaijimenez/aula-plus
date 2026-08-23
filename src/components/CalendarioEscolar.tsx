@@ -150,9 +150,9 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
   const verificarEventosDelDia = (fechaIteracion: string) => {
     return eventosOficiales.filter(evento => {
       if (!evento.fechaFin) {
-        return evento.fecha === fechaIteracion; // Evento de un solo día
+        return evento.fecha === fechaIteracion; 
       } else {
-        return fechaIteracion >= evento.fecha && fechaIteracion <= evento.fechaFin; // Dentro del rango
+        return fechaIteracion >= evento.fecha && fechaIteracion <= evento.fechaFin; 
       }
     });
   };
@@ -174,7 +174,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     const esHoy = hoyLocalString === fechaIteracion;
     const estaSeleccionado = diaSeleccionado === fechaIteracion;
     
-    // Si hay varios eventos oficiales (rara vez), tomamos el primero para el color principal
     const eventoPrincipal = eventosDelDia.length > 0 ? eventosDelDia[0] : null;
 
     celdas.push(
@@ -192,7 +191,7 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           color: esHoy ? 'white' : '#333', 
           backgroundColor: esHoy ? 'var(--accent-blue)' : 'transparent',
           borderRadius: esHoy ? '50%' : '0',
-          width: esHoy ? '28px' : 'auto',
+          width: esHoy ? '28px' : 'height',
           height: esHoy ? '28px' : 'auto',
           display: 'flex',
           alignItems: 'center',
@@ -220,10 +219,8 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
     );
   }
 
-  // Datos para el panel de detalles lateral
   const eventosSeleccionados = diaSeleccionado ? verificarEventosDelDia(diaSeleccionado) : [];
   const notasSeleccionadas = diaSeleccionado ? notasPersonales.filter(n => n.fecha === diaSeleccionado) : [];
-
   const formatoFechaPanel = diaSeleccionado ? new Date(diaSeleccionado + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Selecciona un día';
 
   return (
@@ -292,7 +289,6 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
           box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
 
-        /* Layout Responsivo: Primero Calendario, Luego Panel (en móviles) */
         .agenda-layout {
           display: grid;
           grid-template-columns: 1fr 320px;
@@ -326,11 +322,14 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
             <h2 style={{ margin: 0, fontSize: '1.5rem', textTransform: 'capitalize' }}>
               {MESES[mesActual]} {añoActual}
             </h2>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => cambiarMes(-1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>◀ Mes Ant.</button>
-              <button onClick={() => setFechaActual(new Date())} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', border: 'none', padding: '0.5rem 1rem' }}>Hoy</button>
-              <button onClick={() => cambiarMes(1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>Sig. Mes ▶</button>
-            </div>
+            
+            <TutorialTooltip mensaje="Navega entre los meses para revisar eventos futuros o pasados." posicion="bottom">
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => cambiarMes(-1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>◀ Mes Ant.</button>
+                <button onClick={() => setFechaActual(new Date())} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', border: 'none', padding: '0.5rem 1rem' }}>Hoy</button>
+                <button onClick={() => cambiarMes(1)} className="pill-btn" style={{ background: '#e0e0e0', color: '#333', border: 'none', padding: '0.5rem 1rem' }}>Sig. Mes ▶</button>
+              </div>
+            </TutorialTooltip>
           </div>
 
           <div className="cal-grid">
@@ -382,34 +381,36 @@ export default function CalendarioEscolar({ onVolver }: { onVolver: () => void }
                 <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '0.5rem 0' }} />
 
                 {/* Formulario de Nueva Nota */}
-                <form onSubmit={guardarNota} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Añadir recordatorio:</label>
-                  <textarea 
-                    required 
-                    value={textoNota} 
-                    onChange={e => setTextoNota(e.target.value)} 
-                    className="search-input" 
-                    style={{ resize: 'vertical', minHeight: '80px', width: '100%', backgroundColor: colorNota, color: '#000', border: 'none' }} 
-                    placeholder="Escribe aquí..."
-                  ></textarea>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      {COLORES_NOTAS.map(c => (
-                        <button 
-                          key={c.hex} 
-                          type="button" 
-                          onClick={() => setColorNota(c.hex)}
-                          style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: c.hex, border: colorNota === c.hex ? '2px solid white' : 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
-                          title={c.nombre}
-                        />
-                      ))}
+                <TutorialTooltip mensaje="Elige un color para tu post-it y presiona Guardar. Se sincronizará en todos tus dispositivos." posicion="top" esBloque={true}>
+                  <form onSubmit={guardarNota} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Añadir recordatorio:</label>
+                    <textarea 
+                      required 
+                      value={textoNota} 
+                      onChange={e => setTextoNota(e.target.value)} 
+                      className="search-input" 
+                      style={{ resize: 'vertical', minHeight: '80px', width: '100%', backgroundColor: colorNota, color: '#000', border: 'none' }} 
+                      placeholder="Escribe aquí..."
+                    ></textarea>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {COLORES_NOTAS.map(c => (
+                          <button 
+                            key={c.hex} 
+                            type="button" 
+                            onClick={() => setColorNota(c.hex)}
+                            style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: c.hex, border: colorNota === c.hex ? '2px solid white' : 'none', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
+                            title={c.nombre}
+                          />
+                        ))}
+                      </div>
+                      <button type="submit" disabled={guardando} className="pill-btn" style={{ background: '#333', color: 'white', padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                        {guardando ? '...' : 'Guardar'}
+                      </button>
                     </div>
-                    <button type="submit" disabled={guardando} className="pill-btn" style={{ background: '#333', color: 'white', padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
-                      {guardando ? '...' : 'Guardar'}
-                    </button>
-                  </div>
-                </form>
+                  </form>
+                </TutorialTooltip>
 
               </div>
             )}
