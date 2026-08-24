@@ -15,9 +15,11 @@ export default function UtilidadEquipos({ onVolver }: { onVolver: () => void }) 
   const [numEquipos, setNumEquipos] = useState(4);
   const [equipos, setEquipos] = useState<Alumno[][]>([]);
   
+  // NUEVO: Estado para guardar los nombres personalizados de los equipos
+  const [nombresEquipos, setNombresEquipos] = useState<string[]>([]);
+  
   const [alumnoParaAsignar, setAlumnoParaAsignar] = useState<Alumno | null>(null);
 
-  // MAGIA SEGURIDAD: Obtenemos el email para filtrar
   useEffect(() => {
     const fetchGrupos = async () => {
       const sessionLocal = localStorage.getItem('aulaPlusSession');
@@ -26,7 +28,6 @@ export default function UtilidadEquipos({ onVolver }: { onVolver: () => void }) 
 
       if (!email) return;
 
-      // FILTRO ESTRICTO: Solo grupos del maestro actual
       const q = query(collection(db, 'groups'), where('docenteEmail', '==', email));
       const snap = await getDocs(q);
       const lista: Grupo[] = [];
@@ -45,7 +46,17 @@ export default function UtilidadEquipos({ onVolver }: { onVolver: () => void }) 
       
       lista.sort((a,b) => a.fullName.localeCompare(b.fullName));
       setAlumnos(lista);
+      
       setEquipos(Array.from({ length: numEquipos }, () => []));
+      
+      // MAGIA UX: Mantiene los nombres editados si solo cambias la cantidad de equipos
+      setNombresEquipos(prev => {
+        const newNames = Array.from({ length: numEquipos }, (_, i) => `Equipo ${i + 1}`);
+        for(let i = 0; i < Math.min(prev.length, numEquipos); i++) {
+          newNames[i] = prev[i];
+        }
+        return newNames;
+      });
     };
     fetchAlumnos();
   }, [grupoSeleccionado, numEquipos]);
@@ -64,6 +75,7 @@ export default function UtilidadEquipos({ onVolver }: { onVolver: () => void }) 
   const limpiarEquipos = () => {
     setEquipos(Array.from({ length: numEquipos }, () => []));
     setAlumnoParaAsignar(null);
+    // Nota: A propósito NO limpiamos los nombres editados para no hacer trabajar doble al maestro
   };
 
   const alumnosAsignadosIds = equipos.flat().map(a => a.id);
@@ -84,12 +96,19 @@ export default function UtilidadEquipos({ onVolver }: { onVolver: () => void }) 
     setAlumnoParaAsignar(null);
   };
 
+  const handleNombreEquipoChange = (index: number, nuevoNombre: string) => {
+    const nuevosNombres = [...nombresEquipos];
+    nuevosNombres[index] = nuevoNombre;
+    setNombresEquipos(nuevosNombres);
+  };
+
   const exportarDocumentoWord = () => {
     if (!nombreActividad) { alert("Ponle un nombre a la actividad primero."); return; }
     
+    // Usamos los nombres personalizados o caemos en el default seguro
     let htmlEquipos = equipos.map((eq, i) => `
       <div style="margin-bottom: 20px; page-break-inside: avoid;">
-        <h3 style="background-color: #1C51FF; color: white; padding: 8px; border-radius: 4px; margin-bottom: 5px;">Equipo ${i + 1}</h3>
+        <h3 style="background-color: #1C51FF; color: white; padding: 8px; border-radius: 4px; margin-bottom: 5px;">${nombresEquipos[i] || `Equipo ${i + 1}`}</h3>
         <ul style="list-style-type: none; padding-left: 10px; margin-top: 5px;">
           ${eq.map(a => `<li style="padding: 4px 0; border-bottom: 1px solid #eee;"><b>${a.studentNumber}.</b> ${a.fullName}</li>`).join('')}
         </ul>
@@ -117,76 +136,122 @@ export default function UtilidadEquipos({ onVolver }: { onVolver: () => void }) 
   return (
     <div className="fullscreen-bg" style={{ animation: 'fadeIn 0.3s' }}>
       
-      {/* HEADER MEJORADO UX */}
-      <div style={{ flexShrink: 0, display: 'flex', gap: '1rem', padding: '1.5rem', width: '100%', backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', zIndex: 100, borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px', marginBottom: '1.5rem' }}>
+      {/* Estilos dinámicos para Desktop vs Móvil */}
+      <style>{`
+        .responsive-grid {
+          display: grid;
+          grid-template-columns: 1fr; /* Móvil por defecto */
+          gap: 2rem;
+          align-items: start;
+        }
+        .alumnos-panel {
+          background-color: var(--bg-panel);
+          padding: 1.5rem;
+          border-radius: 24px;
+          border: 1px solid var(--border-color);
+          max-height: 250px; /* En móvil, que no sature la pantalla */
+          overflow-y: auto;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        .input-equipo {
+          background: transparent;
+          border: none;
+          color: white;
+          font-size: 1.1rem;
+          font-weight: bold;
+          outline: none;
+          border-bottom: 1px dashed rgba(255,255,255,0.4);
+          width: 100%;
+          max-width: 160px;
+          transition: border-color 0.2s;
+        }
+        .input-equipo:focus {
+          border-bottom: 1px solid white;
+        }
+        .input-equipo::placeholder {
+          color: rgba(255,255,255,0.7);
+        }
+        @media (min-width: 900px) {
+          .responsive-grid {
+            grid-template-columns: 320px 1fr; /* Desktop: Alumnos a la izquierda, equipos derecha */
+          }
+          .alumnos-panel {
+            position: sticky;
+            top: 20px;
+            max-height: calc(100vh - 150px); /* En escritorio ocupa más alto fijo */
+          }
+        }
+      `}</style>
+
+      {/* HEADER */}
+      <div style={{ flexShrink: 0, display: 'flex', gap: '1rem', padding: '1rem 1.5rem', width: '100%', backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', zIndex: 100, borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>← Salir</button>
-          <h3 style={{ margin: 0, color: 'var(--accent-blue)', fontSize: '1.5rem' }}>🧩 Creador de Equipos</h3>
+          <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', padding: '0.4rem 1rem' }}>← Salir</button>
+          <h3 style={{ margin: 0, color: 'var(--accent-blue)', fontSize: '1.4rem' }}>🧩 Equipos</h3>
         </div>
         
         <TutorialTooltip mensaje="Genera un documento oficial con la alineación de todos los equipos para imprimir.">
-          <button onClick={exportarDocumentoWord} className="pill-btn" style={{ background: '#185ABD', color: 'white', fontSize: '0.95rem', padding: '0.6rem 1.2rem', fontWeight: 'bold' }}>📄 Exportar a Word</button>
+          <button onClick={exportarDocumentoWord} className="pill-btn" style={{ background: '#185ABD', color: 'white', fontSize: '0.95rem', padding: '0.5rem 1rem', fontWeight: 'bold' }}>📄 Exportar a Word</button>
         </TutorialTooltip>
       </div>
 
-      <div style={{ padding: '0 1.5rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '2rem', backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
-          <div>
-            <label style={{ display: 'block', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 'bold' }}>1. Selecciona Grupo</label>
-            <select className="search-input" value={grupoSeleccionado} onChange={e => setGrupoSeleccionado(e.target.value)} style={{ borderLeft: '4px solid var(--accent-blue)', fontWeight: 'bold' }}>
+      <div style={{ padding: '0 1rem' }}>
+        {/* CONFIGURACIÓN */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <label style={{ display: 'block', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>1. Selecciona Grupo</label>
+            <select className="search-input" value={grupoSeleccionado} onChange={e => setGrupoSeleccionado(e.target.value)} style={{ borderLeft: '4px solid var(--accent-blue)', fontWeight: 'bold', margin: 0 }}>
               <option value="">-- Elige un grupo --</option>
               {grupos.map(g => <option key={g.id} value={g.id}>{g.name} - {g.subject}</option>)}
             </select>
           </div>
-          <div>
-            <label style={{ display: 'block', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 'bold' }}>2. Nombre de la Actividad</label>
-            <input type="text" className="search-input" placeholder="Ej. Proyecto Final..." value={nombreActividad} onChange={e => setNombreActividad(e.target.value)} />
+          <div style={{ flex: 2, minWidth: '200px' }}>
+            <label style={{ display: 'block', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>2. Actividad</label>
+            <input type="text" className="search-input" placeholder="Ej. Proyecto Final..." value={nombreActividad} onChange={e => setNombreActividad(e.target.value)} style={{ margin: 0 }} />
           </div>
-          <div>
-            <label style={{ display: 'block', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 'bold' }}>3. Cantidad de Equipos</label>
-            <input type="number" className="search-input" min="2" max="20" value={numEquipos} onChange={e => setNumEquipos(Math.min(20, Math.max(2, Number(e.target.value))))} style={{ maxWidth: '120px' }} />
+          <div style={{ width: '100px' }}>
+            <label style={{ display: 'block', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>3. Equipos</label>
+            <input type="number" className="search-input" min="2" max="20" value={numEquipos} onChange={e => setNumEquipos(Math.min(20, Math.max(2, Number(e.target.value))))} style={{ margin: 0 }} />
           </div>
         </div>
 
         {grupoSeleccionado && (
           <>
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
               <TutorialTooltip mensaje="Crea los equipos aleatoriamente mezclando a todos los alumnos disponibles." posicion="top">
-                <button onClick={armarAutomatico} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', padding: '0.8rem 1.5rem', fontSize: '1.1rem', fontWeight: 'bold' }}>🎲 Armar Equipos al Azar</button>
+                <button onClick={armarAutomatico} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white', padding: '0.6rem 1rem', fontSize: '1rem', fontWeight: 'bold' }}>🎲 Armar al Azar</button>
               </TutorialTooltip>
               
-              <button onClick={limpiarEquipos} className="pill-btn" style={{ background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: '1px solid var(--accent-red)' }}>🗑 Limpiar Todo</button>
+              <button onClick={limpiarEquipos} className="pill-btn" style={{ background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: '1px solid var(--accent-red)', padding: '0.6rem 1rem' }}>🗑 Limpiar</button>
             </div>
 
-            <div className="equipos-layout" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+            <div className="responsive-grid">
               
-              {/* ÁREA DE ALUMNOS DISPONIBLES */}
-              <div className="pool-alumnos" style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                  <h4 style={{ margin: 0, color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>
-                    Alumnos Disponibles 
-                  </h4>
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-main)', backgroundColor: 'var(--bg-input)', padding: '0.3rem 0.8rem', borderRadius: '50px', fontWeight: 'bold' }}>
+              {/* COLUMNA IZQUIERDA (O ARRIBA EN MÓVIL): ALUMNOS DISPONIBLES */}
+              <div className="alumnos-panel custom-scrollbar">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem', flexWrap: 'wrap' }}>
+                  <h4 style={{ margin: 0, color: 'var(--accent-yellow)', fontSize: '1.1rem' }}>Alumnos Disponibles</h4>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-main)', backgroundColor: 'var(--bg-input)', padding: '0.2rem 0.6rem', borderRadius: '50px', fontWeight: 'bold' }}>
                     {alumnosDisponibles.length} por asignar
                   </span>
                 </div>
-                <p style={{ margin: '0 0 1.5rem 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                  👆 Toca a un alumno para seleccionarlo (se pondrá amarillo) y luego toca la caja del equipo al que lo quieres enviar.
+                <p style={{ margin: '0 0 1rem 0', color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: '1.3' }}>
+                  👆 Toca un alumno, luego toca el equipo destino.
                 </p>
                 
-                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {alumnosDisponibles.map(a => (
                     <TutorialTooltip key={a.id} mensaje={`Selecciona a ${a.fullName.split(' ')[0]} y luego toca un equipo.`}>
                       <div 
                         onClick={() => setAlumnoParaAsignar(alumnoParaAsignar?.id === a.id ? null : a)}
                         style={{ 
-                          padding: '0.5rem 1rem', 
+                          padding: '0.4rem 0.8rem', 
                           backgroundColor: alumnoParaAsignar?.id === a.id ? 'var(--accent-yellow)' : 'var(--bg-input)', 
                           color: alumnoParaAsignar?.id === a.id ? '#000' : 'var(--text-main)', 
-                          borderRadius: '12px', 
+                          borderRadius: '8px', 
                           border: `2px solid ${alumnoParaAsignar?.id === a.id ? 'var(--accent-yellow)' : 'transparent'}`, 
                           cursor: 'pointer', 
-                          fontSize: '0.95rem',
+                          fontSize: '0.85rem',
                           fontWeight: 'bold',
                           userSelect: 'none',
                           transition: 'all 0.2s',
@@ -198,16 +263,16 @@ export default function UtilidadEquipos({ onVolver }: { onVolver: () => void }) 
                       </div>
                     </TutorialTooltip>
                   ))}
-                  {alumnosDisponibles.length === 0 && <div style={{ width: '100%', textAlign: 'center', padding: '2rem', backgroundColor: 'rgba(46, 229, 92, 0.1)', color: 'var(--accent-green)', borderRadius: '12px', fontWeight: 'bold' }}>✅ Todos los alumnos han sido asignados</div>}
+                  {alumnosDisponibles.length === 0 && <div style={{ width: '100%', textAlign: 'center', padding: '1rem', backgroundColor: 'rgba(46, 229, 92, 0.1)', color: 'var(--accent-green)', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem' }}>✅ Todos asignados</div>}
                 </div>
               </div>
 
-              {/* CAJAS DE EQUIPOS */}
-              <div className="equipos-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem' }}>
+              {/* COLUMNA DERECHA (O ABAJO EN MÓVIL): CAJAS DE EQUIPOS */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem' }}>
                 {equipos.map((equipo, index) => (
                   <div 
                     key={index} 
-                    className={`equipo-card ${alumnoParaAsignar ? 'selectable' : ''}`}
+                    className={alumnoParaAsignar ? 'selectable' : ''}
                     onClick={() => asignarAEquipo(index)}
                     style={{ 
                       backgroundColor: 'var(--bg-panel)', 
@@ -216,29 +281,38 @@ export default function UtilidadEquipos({ onVolver }: { onVolver: () => void }) 
                       border: alumnoParaAsignar ? '2px dashed var(--accent-blue)' : '1px solid var(--border-color)',
                       transition: 'all 0.2s',
                       cursor: alumnoParaAsignar ? 'pointer' : 'default',
-                      boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.02)'
                     }}
                   >
-                    <div style={{ backgroundColor: 'var(--accent-blue)', color: 'white', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h4 style={{ margin: 0, fontSize: '1.2rem' }}>Equipo {index + 1}</h4>
-                      <span style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.2rem 0.6rem', borderRadius: '50px' }}>{equipo.length} miembros</span>
+                    <div style={{ backgroundColor: 'var(--accent-blue)', color: 'white', padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                      <TutorialTooltip mensaje="Toca aquí para personalizar el nombre del equipo (Ej. Los Halcones).">
+                        <input 
+                          type="text" 
+                          className="input-equipo"
+                          value={nombresEquipos[index] || ''} 
+                          onChange={e => handleNombreEquipoChange(index, e.target.value)}
+                          placeholder={`Equipo ${index + 1}`}
+                          title="Toca para editar nombre"
+                        />
+                      </TutorialTooltip>
+                      <span style={{ fontSize: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.3rem 0.6rem', borderRadius: '50px', fontWeight: 'bold' }}>{equipo.length}</span>
                     </div>
                     
-                    <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', minHeight: '100px' }}>
+                    <div style={{ padding: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', minHeight: '80px' }}>
                       {equipo.map(a => (
                         <div 
                           key={a.id} 
                           onClick={(e) => { e.stopPropagation(); removerDeEquipo(index, a.id); }}
-                          style={{ backgroundColor: 'var(--bg-input)', padding: '0.6rem 1rem', borderRadius: '8px', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid transparent', transition: 'all 0.2s' }}
+                          style={{ backgroundColor: 'var(--bg-input)', padding: '0.5rem 0.8rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid transparent', transition: 'all 0.2s' }}
                           title="Clic para remover"
                           onMouseOver={(e) => (e.currentTarget.style.borderColor = 'var(--accent-red)')}
                           onMouseOut={(e) => (e.currentTarget.style.borderColor = 'transparent')}
                         >
                           <span style={{color: 'var(--text-main)', fontWeight: '500'}}>{a.studentNumber}. {a.fullName.split(' ')[0]} {a.fullName.split(' ')[1] || ''}</span>
-                          <span style={{color: 'var(--accent-red)', fontSize: '1.1rem'}}>✖</span>
+                          <span style={{color: 'var(--accent-red)', fontSize: '1rem', opacity: 0.8}}>✖</span>
                         </div>
                       ))}
-                      {equipo.length === 0 && <p style={{ color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.9rem', margin: 'auto', fontStyle: 'italic' }}>{alumnoParaAsignar ? '👇 Toca para soltar aquí' : 'Caja vacía'}</p>}
+                      {equipo.length === 0 && <p style={{ color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.8rem', margin: 'auto', fontStyle: 'italic' }}>{alumnoParaAsignar ? '👇 Suelta aquí' : 'Caja vacía'}</p>}
                     </div>
                   </div>
                 ))}
