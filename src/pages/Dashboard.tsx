@@ -22,7 +22,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<{id: string, nombre: string, tab: 'alumnos' | 'asistencia'} | null>(null);
   const [aulaSeleccionada, setAulaSeleccionada] = useState<{id: string, nombre: string} | null>(null);
   
-  // AÑADIDO: Estado para saber qué grupo vamos a editar
   const [grupoAEditar, setGrupoAEditar] = useState<any>(null);
 
   const [userEmail, setUserEmail] = useState('');
@@ -148,22 +147,18 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     setVistaActual('mi-aula');
   };
 
-  const maxVark = Math.max(varkInfo.v, varkInfo.a, varkInfo.r, varkInfo.k, 1);
-  
-  // AÑADIDO: Textos informativos con ejemplos detallados para el icono "i"
+  // MÓDULOS ACTUALIZADOS CON REPORTES DE ASISTENCIA Y COLORES VIBRANTES
   const modulos = [
-    { id: 'mis-grupos-aula', titulo: 'Mi Aula Virtual', subtitulo: 'Actividades, Pizarra y Biblioteca', color: 'var(--accent-purple)', inicial: 'A', info: '💻 ¿Qué hacer aquí?\nCrea actividades y avisos para que tus alumnos los vean en su Pizarra.\n\n✨ Ejemplo:\nPublica una tarea con enlace a un PDF en Drive, o manda un Aviso Dorado pidiendo material para mañana.' },
-    { id: 'mis-grupos', titulo: 'Gestión y Asistencia', subtitulo: 'Ver listas, VARK y asistencia', color: 'var(--accent-blue)', inicial: 'G', info: '👥 ¿Qué hacer aquí?\nAdministra tus grupos, edita su información, pasa asistencia diaria y registra el estilo de aprendizaje de tus alumnos.\n\n✨ Ejemplo:\nEntra a 1°A, toma asistencia rápida con un clic y visualiza qué porcentaje de tu grupo es Visual o Kinestésico.' },
+    { id: 'mis-grupos-aula', titulo: 'Mi Aula Virtual', subtitulo: 'Actividades, Pizarra y Biblioteca', color: '#9C27B0', inicial: 'A', info: '💻 ¿Qué hacer aquí?\nCrea actividades y avisos para que tus alumnos los vean en su Pizarra.\n\n✨ Ejemplo:\nPublica una tarea con enlace a un PDF en Drive, o manda un Aviso Dorado pidiendo material para mañana.' },
+    { id: 'mis-grupos', titulo: 'Gestión y Asistencia', subtitulo: 'Ver listas, VARK y asistencia', color: '#1C51FF', inicial: 'G', info: '👥 ¿Qué hacer aquí?\nAdministra tus grupos, edita su información, pasa asistencia diaria y registra el estilo de aprendizaje de tus alumnos.\n\n✨ Ejemplo:\nEntra a 1°A, toma asistencia rápida con un clic y visualiza qué porcentaje de tu grupo es Visual o Kinestésico.' },
     { id: 'calendario', titulo: 'Calendario Escolar', subtitulo: 'Planea el ciclo con tus post-its', color: '#FFC107', inicial: 'C', info: '📅 ¿Qué hacer aquí?\nOrganiza tus eventos, juntas de CTE, días festivos y exámenes en un calendario interactivo.\n\n✨ Ejemplo:\nAgrega un post-it amarillo el 15 de mayo para recordar la entrega de calificaciones del trimestre.' }, 
-    { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Reportes que comunican mejor', color: 'var(--accent-green)', inicial: 'R', info: '📊 ¿Qué hacer aquí?\nGenera reportes de conducta, incidencias y estadísticas de rendimiento listos para imprimir o enviar a orientación.\n\n✨ Ejemplo:\nCrea un reporte de indisciplina para un alumno que interrumpió la clase, y expórtalo en PDF.' },
-    { id: 'biblioteca', titulo: 'Biblioteca Docente', subtitulo: 'Entra y sorprendete con el contenido', color: 'var(--accent-darkred)', inicial: 'B', info: '📚 ¿Qué hacer aquí?\nExplora libros de texto, normativas, y formatos oficiales subidos por toda la comunidad.\n\n✨ Ejemplo:\nBusca "Plan de Estudios 2022", guárdalo en tus Favoritos (⭐) y tenlo a la mano en tu Aula Virtual.' },
-    { id: 'modulo-ia', titulo: 'Ahorra tiempo, pregúntale a la IA', subtitulo: 'Asistente pedagógico y generador', color: 'var(--accent-yellow)', inicial: 'IA', info: '🤖 ¿Qué hacer aquí?\nUsa Inteligencia Artificial para redactar planeaciones, exámenes o rúbricas en segundos.\n\n✨ Ejemplo:\nPídele: "Crea una rúbrica de 5 puntos para evaluar una maqueta sobre el ciclo del agua" y cópiala a Word.' },
+    { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Reportes que comunican mejor', color: '#4CAF50', inicial: 'R', info: '📊 ¿Qué hacer aquí?\nGenera reportes de conducta, incidencias, ASISTENCIA y estadísticas de rendimiento listos para imprimir o enviar a orientación.\n\n✨ Ejemplo:\nCrea un reporte de indisciplina, o exporta el porcentaje de Asistencia/Faltas de todo tu grupo.' },
+    { id: 'biblioteca', titulo: 'Biblioteca Docente', subtitulo: 'Entra y sorprendete con el contenido', color: '#D32F2F', inicial: 'B', info: '📚 ¿Qué hacer aquí?\nExplora libros de texto, normativas, y formatos oficiales subidos por toda la comunidad.\n\n✨ Ejemplo:\nBusca "Plan de Estudios 2022", guárdalo en tus Favoritos (⭐) y tenlo a la mano en tu Aula Virtual.' },
+    { id: 'modulo-ia', titulo: 'Ahorra tiempo, pregúntale a la IA', subtitulo: 'Asistente pedagógico y generador', color: '#F97316', inicial: 'IA', info: '🤖 ¿Qué hacer aquí?\nUsa Inteligencia Artificial para redactar planeaciones, exámenes o rúbricas en segundos.\n\n✨ Ejemplo:\nPídele: "Crea una rúbrica de 5 puntos para evaluar una maqueta sobre el ciclo del agua" y cópiala a Word.' },
     { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Haz de tu clase una experiencia', color: '#607D8B', inicial: 'U', info: '🛠️ ¿Qué hacer aquí?\nHerramientas prácticas para gamificar tu clase y hacerla dinámica.\n\n✨ Ejemplo:\nUsa la Ruleta para elegir alumnos al azar para participar, o el Cronómetro gigante para una dinámica de equipos.' }
   ];
 
   const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); setGuiaConductual(false); };
-
-  const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'reportes';
 
   return (
     <>
@@ -235,73 +230,60 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
         )}
       </header>
 
-      <main className="dashboard-layout" style={{ gridTemplateColumns: mostrarSidebar ? '300px 1fr' : '1fr' }}>
-        
-        {mostrarSidebar && (
-          <aside className="snapshot-sidebar" style={{ animation: 'fadeIn 0.3s' }}>
-            <div>
-              <h1 style={{ fontSize: '2.5rem', margin: '0 0 0.5rem 0', fontWeight: 700, letterSpacing: '-1px' }}>Dashboard</h1>
-              <p style={{ color: 'var(--text-muted)', margin: 0 }}>Ciclo Escolar 2026-2027</p>
-            </div>
-            {vistaActual === 'inicio' && (
-              <div className="hero-card">
-                <span style={{ opacity: 0.8, fontSize: '0.9rem', fontWeight: 500 }}>Accesos Rápidos</span>
-                <h2 style={{ fontSize: '1.8rem', margin: '0.5rem 0 1.5rem 0', fontWeight: 700 }}>Mi Aula</h2>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+      {/* MAGIA UX: PANTALLA COMPLETA ABSOLUTA (1fr) */}
+      <main className="dashboard-layout" style={{ gridTemplateColumns: '1fr' }}>
+        <section className="workspace-main">
+          
+          {vistaActual === 'inicio' && (
+            <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
+              
+              {/* HERO CARD A PANTALLA COMPLETA */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1.5rem', backgroundColor: 'var(--bg-panel)', padding: '2rem 3rem', borderRadius: '24px', border: '1px solid var(--border-color)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                <div>
+                  <h1 style={{ fontSize: '2.8rem', margin: '0 0 0.5rem 0', fontWeight: 800, letterSpacing: '-1px', color: 'var(--text-main)' }}>Dashboard General</h1>
+                  <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '1.1rem', fontWeight: 500 }}>Ciclo Escolar 2026-2027</p>
+                </div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
                   <TutorialTooltip mensaje="Gestiona tus actividades y la Pizarra Alumno.">
-                    <button onClick={() => navegarModulo('mis-grupos-aula')} className="pill-btn" style={{ backgroundColor: 'white', color: 'var(--accent-blue)' }}>Entrar al Aula</button>
+                    <button onClick={() => navegarModulo('mis-grupos-aula')} className="pill-btn" style={{ backgroundColor: 'var(--accent-purple)', color: 'white', padding: '1rem 2rem', fontSize: '1.1rem', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(156, 39, 176, 0.3)' }}>🚀 Entrar a Mi Aula</button>
                   </TutorialTooltip>
                 </div>
               </div>
-            )}
 
-            {varkInfo.visible && vistaActual === 'vista-grupo' && (
-              <div className="vark-stats-card">
-                <h4 style={{ margin: '0 0 1rem 0' }}>Análisis VARK del Grupo</h4>
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <div className="vark-bar-container"><span className="vark-bar-label">V</span><div className="vark-bar-track"><div className="vark-bar-fill" style={{ width: `${(varkInfo.v / maxVark) * 100}%`, backgroundColor: 'var(--accent-blue)' }}></div></div><span className="vark-bar-count">{varkInfo.v}</span></div>
-                  <div className="vark-bar-container"><span className="vark-bar-label">A</span><div className="vark-bar-track"><div className="vark-bar-fill" style={{ width: `${(varkInfo.a / maxVark) * 100}%`, backgroundColor: 'var(--accent-yellow)' }}></div></div><span className="vark-bar-count">{varkInfo.a}</span></div>
-                  <div className="vark-bar-container"><span className="vark-bar-label">R</span><div className="vark-bar-track"><div className="vark-bar-fill" style={{ width: `${(varkInfo.r / maxVark) * 100}%`, backgroundColor: 'var(--accent-green)' }}></div></div><span className="vark-bar-count">{varkInfo.r}</span></div>
-                  <div className="vark-bar-container"><span className="vark-bar-label">K</span><div className="vark-bar-track"><div className="vark-bar-fill" style={{ width: `${(varkInfo.k / maxVark) * 100}%`, backgroundColor: 'var(--accent-red)' }}></div></div><span className="vark-bar-count">{varkInfo.k}</span></div>
-                </div>
-              </div>
-            )}
-
-            {guiaConductual && vistaActual === 'reportes' && (
-              <div className="vark-stats-card" style={{ borderLeft: '4px solid var(--accent-yellow)' }}>
-                <h4 style={{ margin: '0 0 1rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>💡 Guía de Llenado</h4>
-                <details className="vark-accordion"><summary>📌 Eventualidades</summary><div><p>Vocabulario inadecuado, interrumpir clase, etc.</p></div></details>
-              </div>
-            )}
-          </aside>
-        )}
-
-        <section className="workspace-main">
-          {vistaActual === 'inicio' && (
-            <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
-              <div className="tabs-nav"><span className="tab active">Módulos Globales</span></div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
+              {/* GRID DE TARJETAS GLOW */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
                 {modulos.map((mod) => (
-                  <div key={mod.id} className="activity-card hover-scale" style={{ margin: 0, transition: 'all 0.2s', position: 'relative' }}>
-                    <div onClick={() => navegarModulo(mod.id)} style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', paddingRight: '2rem' }}>
-                      <div className="circle-icon" style={{ backgroundColor: 'var(--bg-app)', color: mod.color, border: `1px solid ${mod.color}` }}>{mod.inicial}</div>
+                  <div key={mod.id} className="activity-card hover-glow" onClick={() => navegarModulo(mod.id)} style={{ cursor: 'pointer', margin: 0, transition: 'all 0.3s ease', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderTop: `5px solid ${mod.color}`, borderRadius: '20px', padding: '1.8rem 1.5rem', position: 'relative', '--glow-color': `${mod.color}40` } as React.CSSProperties}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', paddingRight: '2rem' }}>
+                      <div className="circle-icon" style={{ backgroundColor: 'var(--bg-app)', color: mod.color, border: `2px solid ${mod.color}`, width: '60px', height: '60px', fontSize: '1.6rem', flexShrink: 0 }}>{mod.inicial}</div>
                       <div>
-                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>{mod.titulo}</h4>
-                        <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{mod.subtitulo}</p>
+                        <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)' }}>{mod.titulo}</h4>
+                        <p style={{ margin: '0.4rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: '1.4' }}>{mod.subtitulo}</p>
                       </div>
                     </div>
-                    {/* BOTÓN "i" DE INFORMACIÓN (Se abre con clic o se ve al pasar el ratón) */}
+                    {/* BOTÓN (i) DE INFORMACIÓN CON ANIMACIÓN Y COLOR DINÁMICO */}
                     <button 
                       onClick={(e) => { e.stopPropagation(); alert(mod.info); }}
-                      title={mod.info}
-                      style={{ position: 'absolute', top: '15px', right: '15px', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', cursor: 'help', fontSize: '1rem' }}
+                      title="Más información"
+                      className="info-btn"
+                      style={{ position: 'absolute', top: '15px', right: '15px', background: 'rgba(0,0,0,0.03)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: mod.color, cursor: 'help', fontSize: '1.2rem', transition: 'all 0.2s' }}
                     >
                       ℹ️
                     </button>
                   </div>
                 ))}
               </div>
-              <style>{`.hover-scale:hover { transform: scale(1.03); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }`}</style>
+              
+              {/* CSS MÁGICO PARA EL GLOW Y HOVER */}
+              <style>{`
+                .hover-glow:hover { 
+                  transform: translateY(-6px) scale(1.01); 
+                  box-shadow: 0 12px 30px var(--glow-color); 
+                  border-color: transparent;
+                  z-index: 10;
+                }
+                .info-btn:hover { transform: scale(1.25); background: rgba(0,0,0,0.08) !important; }
+              `}</style>
             </div>
           )}
 
@@ -311,7 +293,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'calendario' && <CalendarioEscolar onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={setGuiaConductual} />}
           
-          {/* AÑADIDO: Pasamos el grupoAEditar al Formulario para pre-rellenarlo */}
           {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} grupoAEditar={grupoAEditar} />}
           
           {vistaActual === 'mis-grupos' && (
@@ -320,7 +301,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 <h2 style={{ margin: '0 0 0.5rem 0', color: 'var(--accent-blue)' }}>📋 Gestión y Asistencia</h2>
                 <p style={{ margin: 0, color: 'var(--text-muted)' }}>Selecciona un grupo para pasar lista o ver el registro VARK.</p>
               </div>
-              {/* AÑADIDO: Conectamos onEditarGrupo */}
               <MisGrupos 
                 onCrearGrupo={() => { setGrupoAEditar(null); navegarModulo('crear-grupo'); }} 
                 onAbrirGrupo={abrirGrupo} 

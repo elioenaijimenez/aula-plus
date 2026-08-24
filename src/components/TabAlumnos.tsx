@@ -75,6 +75,7 @@ export default function TabAlumnos({ idGrupo, nombreGrupo, onVarkChange }: { idG
   };
 
   const agregarManual = (e: React.FormEvent) => { e.preventDefault(); procesarLista([nuevoNombre]); };
+  
   const importarCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -118,11 +119,20 @@ export default function TabAlumnos({ idGrupo, nombreGrupo, onVarkChange }: { idG
     await updateDoc(doc(db, `groups/${idGrupo}/students`, id), { [`vark.${tipo}`]: !actualVark[tipo] });
   };
 
+  // EXPORTACIÓN OFICIAL MEMBRETADA
   const descargarCSV = (tipo: 'sencilla' | 'vark') => {
     const perfilStr = localStorage.getItem('aulaPlusPerfil');
-    const p = perfilStr ? JSON.parse(perfilStr) : { nombre: 'Docente', escuela: 'Escuela' };
+    const p = perfilStr ? JSON.parse(perfilStr) : { nombre: 'Docente', escuela: 'Escuela Secundaria Técnica' };
     
-    let csvContent = `\uFEFF${p.escuela}\nProfesor:,${p.nombre}\nGrupo:,${nombreGrupo}\nCiclo Escolar:,${cicloEscolar}\n\n`;
+    let csvContent = `\uFEFF`;
+    csvContent += `SISTEMA EDUCATIVO NACIONAL\n`;
+    csvContent += `INSTITUTO DE LA EDUCACIÓN BÁSICA DEL ESTADO DE MORELOS (IEBEM)\n`;
+    csvContent += `DIRECCIÓN DE EDUCACIÓN SECUNDARIA\n\n`;
+    csvContent += `Escuela:,${p.escuela}\n`;
+    csvContent += `Profesor:,${p.nombre}\n`;
+    csvContent += `Grupo:,${nombreGrupo}\n`;
+    csvContent += `Ciclo Escolar:,${cicloEscolar}\n\n`;
+    
     if(tipo === 'vark') {
       csvContent += "No. Lista,Nombre Completo,Visual,Auditivo,Lectoescritura,Kinestesico\n";
       alumnos.forEach(a => { csvContent += `${a.studentNumber},${a.fullName},${a.vark.v ? 'X' : ''},${a.vark.a ? 'X' : ''},${a.vark.r ? 'X' : ''},${a.vark.k ? 'X' : ''}\n`; });
@@ -133,7 +143,7 @@ export default function TabAlumnos({ idGrupo, nombreGrupo, onVarkChange }: { idG
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `Lista_${nombreGrupo}.csv`);
+    link.setAttribute('download', `Lista_Oficial_${nombreGrupo.replace(/[^a-zA-Z0-9]/g, '_')}.csv`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
     setModalExportar(false);
   };
@@ -144,17 +154,33 @@ export default function TabAlumnos({ idGrupo, nombreGrupo, onVarkChange }: { idG
         <p style={{ color: 'var(--text-muted)', margin: 0 }}>{alumnos.length} Alumnos inscritos oficiales</p>
         <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
           
+          {/* BOTONES BLANQUECINOS MEJORADOS UX */}
           <TutorialTooltip mensaje="Evalúa a tus alumnos y genera una gráfica general para tu plan de atención.">
-            <button onClick={() => setMostrarVark(!mostrarVark)} className="pill-btn" style={{ backgroundColor: mostrarVark ? 'var(--accent-blue)' : 'var(--bg-panel)', border: `1px solid ${mostrarVark ? 'var(--accent-blue)' : 'var(--border-color)'}` }}>🧠 Estilos VARK</button>
+            <button 
+              onClick={() => setMostrarVark(!mostrarVark)} 
+              className="pill-btn" 
+              style={{ backgroundColor: mostrarVark ? 'var(--accent-blue)' : '#f4f7f6', color: mostrarVark ? 'white' : '#333', border: `1px solid ${mostrarVark ? 'var(--accent-blue)' : '#d1d5db'}`, fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+            >
+              🧠 Estilos VARK
+            </button>
           </TutorialTooltip>
 
-          <TutorialTooltip mensaje="Descarga la lista en formato Excel (.csv) para imprimirla o compartirla.">
-            <button onClick={() => setModalExportar(true)} className="pill-btn" style={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)' }} disabled={alumnos.length === 0}>⬇️ Exportar Lista</button>
+          <TutorialTooltip mensaje="Descarga la lista oficial en formato Excel (.csv) para imprimirla o compartirla.">
+            <button 
+              onClick={() => setModalExportar(true)} 
+              className="pill-btn" 
+              style={{ backgroundColor: '#f4f7f6', color: '#333', border: '1px solid #d1d5db', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', opacity: alumnos.length === 0 ? 0.5 : 1 }} 
+              disabled={alumnos.length === 0}
+            >
+              ⬇️ Exportar Lista
+            </button>
           </TutorialTooltip>
 
           <TutorialTooltip mensaje="Carga todos tus alumnos desde un archivo Excel (CSV) para evitar copiarlos a mano.">
             <div className="file-upload-wrapper">
-              <button className="pill-btn" style={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--accent-green)', color: 'var(--accent-green)' }}>{procesando ? 'Cargando...' : '📥 Subir CSV'}</button>
+              <button className="pill-btn" style={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--accent-green)', color: 'var(--accent-green)', fontWeight: 'bold' }}>
+                {procesando ? 'Cargando...' : '📥 Subir CSV'}
+              </button>
               <input type="file" accept=".csv" onChange={importarCSV} disabled={procesando} />
             </div>
           </TutorialTooltip>
@@ -213,10 +239,10 @@ export default function TabAlumnos({ idGrupo, nombreGrupo, onVarkChange }: { idG
       {modalExportar && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3 style={{ marginTop: 0, fontSize: '1.4rem' }}>Exportar Lista</h3>
+            <h3 style={{ marginTop: 0, fontSize: '1.4rem' }}>Exportar Lista (Formato SEP/IEBEM)</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-              <button onClick={() => descargarCSV('sencilla')} className="pill-btn" style={{ backgroundColor: 'var(--bg-input)', color: 'white', padding: '1rem' }}>📄 Descargar Sencilla</button>
-              <button onClick={() => descargarCSV('vark')} className="pill-btn" style={{ backgroundColor: 'var(--accent-blue)', color: 'white', padding: '1rem' }}>🧠 Descargar con VARK</button>
+              <button onClick={() => descargarCSV('sencilla')} className="pill-btn" style={{ backgroundColor: 'var(--bg-input)', color: 'white', padding: '1rem' }}>📄 Descargar Solo Nombres</button>
+              <button onClick={() => descargarCSV('vark')} className="pill-btn" style={{ backgroundColor: 'var(--accent-blue)', color: 'white', padding: '1rem' }}>🧠 Descargar con Diagnóstico VARK</button>
               <button onClick={() => setModalExportar(false)} className="pill-btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancelar</button>
             </div>
           </div>
