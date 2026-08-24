@@ -14,8 +14,6 @@ import TutorialTooltip from '../components/TutorialTooltip';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
-interface VarkInfo { visible: boolean; v: number; a: number; r: number; k: number; }
-
 export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: () => void, onSwitchToAdmin?: () => void }) {
   const [vistaActual, setVistaActual] = useState<'inicio' | 'crear-grupo' | 'mis-grupos' | 'vista-grupo' | 'reportes' | 'utilidades' | 'biblioteca' | 'modulo-ia' | 'calendario' | 'mis-grupos-aula' | 'mi-aula'>('inicio');
   
@@ -25,13 +23,11 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   const [grupoAEditar, setGrupoAEditar] = useState<any>(null);
 
   const [userEmail, setUserEmail] = useState('');
-  const [varkInfo, setVarkInfo] = useState<VarkInfo>({ visible: false, v: 0, a: 0, r: 0, k: 0 });
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
   const [perfilObligatorio, setPerfilObligatorio] = useState(false);
   
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
   const [perfilMenuAbierto, setPerfilMenuAbierto] = useState(false);
-  const [guiaConductual, setGuiaConductual] = useState(false);
 
   const { ayudaActiva, toggleAyuda } = useTutorial();
 
@@ -85,7 +81,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
       window.history.pushState(null, '', `#${modulo}`);
     }
     setVistaActual(modulo);
-    limpiarPaneles();
     setMenuMovilAbierto(false); 
   };
 
@@ -147,7 +142,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     setVistaActual('mi-aula');
   };
 
-  // MÓDULOS ACTUALIZADOS CON REPORTES DE ASISTENCIA Y COLORES VIBRANTES
   const modulos = [
     { id: 'mis-grupos-aula', titulo: 'Mi Aula Virtual', subtitulo: 'Actividades, Pizarra y Biblioteca', color: '#9C27B0', inicial: 'A', info: '💻 ¿Qué hacer aquí?\nCrea actividades y avisos para que tus alumnos los vean en su Pizarra.\n\n✨ Ejemplo:\nPublica una tarea con enlace a un PDF en Drive, o manda un Aviso Dorado pidiendo material para mañana.' },
     { id: 'mis-grupos', titulo: 'Gestión y Asistencia', subtitulo: 'Ver listas, VARK y asistencia', color: '#1C51FF', inicial: 'G', info: '👥 ¿Qué hacer aquí?\nAdministra tus grupos, edita su información, pasa asistencia diaria y registra el estilo de aprendizaje de tus alumnos.\n\n✨ Ejemplo:\nEntra a 1°A, toma asistencia rápida con un clic y visualiza qué porcentaje de tu grupo es Visual o Kinestésico.' },
@@ -157,8 +151,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
     { id: 'modulo-ia', titulo: 'Ahorra tiempo, pregúntale a la IA', subtitulo: 'Asistente pedagógico y generador', color: '#F97316', inicial: 'IA', info: '🤖 ¿Qué hacer aquí?\nUsa Inteligencia Artificial para redactar planeaciones, exámenes o rúbricas en segundos.\n\n✨ Ejemplo:\nPídele: "Crea una rúbrica de 5 puntos para evaluar una maqueta sobre el ciclo del agua" y cópiala a Word.' },
     { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Haz de tu clase una experiencia', color: '#607D8B', inicial: 'U', info: '🛠️ ¿Qué hacer aquí?\nHerramientas prácticas para gamificar tu clase y hacerla dinámica.\n\n✨ Ejemplo:\nUsa la Ruleta para elegir alumnos al azar para participar, o el Cronómetro gigante para una dinámica de equipos.' }
   ];
-
-  const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); setGuiaConductual(false); };
 
   return (
     <>
@@ -291,7 +283,9 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'biblioteca' && <Biblioteca onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'utilidades' && <Utilidades onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'calendario' && <CalendarioEscolar onVolver={() => navegarModulo('inicio')} />}
-          {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={setGuiaConductual} />}
+          
+          {/* PASAMOS FUNCIONES VACÍAS PARA NO ROMPER TYPESCRIPT */}
+          {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={() => {}} />}
           
           {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} grupoAEditar={grupoAEditar} />}
           
@@ -309,8 +303,9 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
             </div>
           )}
 
+          {/* PASAMOS FUNCIONES VACÍAS PARA NO ROMPER TYPESCRIPT */}
           {vistaActual === 'vista-grupo' && grupoSeleccionado && (
-            <VistaGrupo key={`${grupoSeleccionado.id}-${grupoSeleccionado.tab}`} idGrupo={grupoSeleccionado.id} nombreGrupo={grupoSeleccionado.nombre} tabInicial={grupoSeleccionado.tab as any} onVolver={() => navegarModulo('mis-grupos')} onVarkChange={setVarkInfo} />
+            <VistaGrupo key={`${grupoSeleccionado.id}-${grupoSeleccionado.tab}`} idGrupo={grupoSeleccionado.id} nombreGrupo={grupoSeleccionado.nombre} tabInicial={grupoSeleccionado.tab as any} onVolver={() => navegarModulo('mis-grupos')} onVarkChange={() => {}} />
           )}
 
           {vistaActual === 'mis-grupos-aula' && (
