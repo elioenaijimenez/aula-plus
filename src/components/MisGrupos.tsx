@@ -2,8 +2,18 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
-// AÑADIDO: Propiedad modoAula para simplificar la interfaz cuando se entra desde "Mi Aula"
-export default function MisGrupos({ onCrearGrupo, onAbrirGrupo, modoAula = false }: { onCrearGrupo: () => void, onAbrirGrupo: (id: string, nombre: string, tab: 'alumnos' | 'asistencia' | 'evidencias') => void, modoAula?: boolean }) {
+// AÑADIDO: Propiedad onEditarGrupo para mandar los datos al formulario
+export default function MisGrupos({ 
+  onCrearGrupo, 
+  onAbrirGrupo, 
+  onEditarGrupo, 
+  modoAula = false 
+}: { 
+  onCrearGrupo: () => void, 
+  onAbrirGrupo: (id: string, nombre: string, tab: 'alumnos' | 'asistencia' | 'evidencias') => void, 
+  onEditarGrupo?: (grupo: any) => void,
+  modoAula?: boolean 
+}) {
   const [grupos, setGrupos] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
 
@@ -40,7 +50,6 @@ export default function MisGrupos({ onCrearGrupo, onAbrirGrupo, modoAula = false
     <div style={{ animation: 'fadeIn 0.3s ease' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h2 style={{ margin: 0 }}>{modoAula ? 'Selecciona un aula virtual' : 'Tus Grupos Registrados'}</h2>
-        {/* Si estamos en modo aula, NO mostramos el botón de crear grupo */}
         {!modoAula && (
           <button onClick={onCrearGrupo} className="pill-btn" style={{ background: 'var(--accent-blue)', color: 'white' }}>+ Nuevo Grupo</button>
         )}
@@ -68,13 +77,20 @@ export default function MisGrupos({ onCrearGrupo, onAbrirGrupo, modoAula = false
                   <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{g.schoolYear}</p>
                 </div>
                 
-                {/* Si estamos en modo aula, OCULTAMOS los botones de abajo */}
                 {!modoAula && (
                   <div style={{ display: 'flex', gap: '0.8rem', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', width: '100%' }}>
                     <button onClick={(e) => { e.stopPropagation(); onAbrirGrupo(g.id, tituloCompleto, 'asistencia'); }} className="pill-btn" style={{ flex: 1, background: colorGrado, color: colorGrado === 'var(--accent-green)' ? '#000' : 'white' }}>
                       📅 Asistencia
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); alert("Función de edición en desarrollo."); }} className="pill-btn" style={{ background: 'var(--bg-input)', color: 'var(--text-main)' }} title="Editar Grupo">✏️</button>
+                    {/* BOTÓN EDITAR HABILITADO */}
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); if (onEditarGrupo) onEditarGrupo(g); }} 
+                      className="pill-btn" 
+                      style={{ background: 'var(--bg-input)', color: 'var(--text-main)' }} 
+                      title="Editar Grupo"
+                    >
+                      ✏️
+                    </button>
                     <button onClick={(e) => { e.stopPropagation(); eliminarGrupo(g.id, g.name); }} className="pill-btn" style={{ background: 'var(--accent-red)', color: 'white' }} title="Eliminar Grupo">🗑️</button>
                   </div>
                 )}

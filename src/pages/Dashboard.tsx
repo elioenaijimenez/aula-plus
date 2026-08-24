@@ -21,6 +21,9 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
   
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<{id: string, nombre: string, tab: 'alumnos' | 'asistencia'} | null>(null);
   const [aulaSeleccionada, setAulaSeleccionada] = useState<{id: string, nombre: string} | null>(null);
+  
+  // AÑADIDO: Estado para saber qué grupo vamos a editar
+  const [grupoAEditar, setGrupoAEditar] = useState<any>(null);
 
   const [userEmail, setUserEmail] = useState('');
   const [varkInfo, setVarkInfo] = useState<VarkInfo>({ visible: false, v: 0, a: 0, r: 0, k: 0 });
@@ -147,19 +150,19 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
 
   const maxVark = Math.max(varkInfo.v, varkInfo.a, varkInfo.r, varkInfo.k, 1);
   
+  // AÑADIDO: Textos informativos con ejemplos detallados para el icono "i"
   const modulos = [
-    { id: 'mis-grupos-aula', titulo: 'Mi Aula Virtual', subtitulo: 'Actividades, Pizarra y Biblioteca', color: 'var(--accent-purple)', inicial: 'A' },
-    { id: 'mis-grupos', titulo: 'Gestión y Asistencia', subtitulo: 'Ver listas, VARK y asistencia', color: 'var(--accent-blue)', inicial: 'G' },
-    { id: 'calendario', titulo: 'Calendario Escolar', subtitulo: 'Planea el ciclo con tus post-its', color: '#FFC107', inicial: 'C' }, 
-    { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Reportes que comunican mejor', color: 'var(--accent-green)', inicial: 'R' },
-    { id: 'biblioteca', titulo: 'Biblioteca Docente', subtitulo: 'Entra y sorprendete con el contenido', color: 'var(--accent-darkred)', inicial: 'B' },
-    { id: 'modulo-ia', titulo: 'Ahorra tiempo, pregúntale a la IA', subtitulo: 'Asistente pedagógico y generador', color: 'var(--accent-yellow)', inicial: 'IA' },
-    { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Haz de tu clase una experiencia', color: '#607D8B', inicial: 'U' }
+    { id: 'mis-grupos-aula', titulo: 'Mi Aula Virtual', subtitulo: 'Actividades, Pizarra y Biblioteca', color: 'var(--accent-purple)', inicial: 'A', info: '💻 ¿Qué hacer aquí?\nCrea actividades y avisos para que tus alumnos los vean en su Pizarra.\n\n✨ Ejemplo:\nPublica una tarea con enlace a un PDF en Drive, o manda un Aviso Dorado pidiendo material para mañana.' },
+    { id: 'mis-grupos', titulo: 'Gestión y Asistencia', subtitulo: 'Ver listas, VARK y asistencia', color: 'var(--accent-blue)', inicial: 'G', info: '👥 ¿Qué hacer aquí?\nAdministra tus grupos, edita su información, pasa asistencia diaria y registra el estilo de aprendizaje de tus alumnos.\n\n✨ Ejemplo:\nEntra a 1°A, toma asistencia rápida con un clic y visualiza qué porcentaje de tu grupo es Visual o Kinestésico.' },
+    { id: 'calendario', titulo: 'Calendario Escolar', subtitulo: 'Planea el ciclo con tus post-its', color: '#FFC107', inicial: 'C', info: '📅 ¿Qué hacer aquí?\nOrganiza tus eventos, juntas de CTE, días festivos y exámenes en un calendario interactivo.\n\n✨ Ejemplo:\nAgrega un post-it amarillo el 15 de mayo para recordar la entrega de calificaciones del trimestre.' }, 
+    { id: 'reportes', titulo: 'Reportes y Estadísticas', subtitulo: 'Reportes que comunican mejor', color: 'var(--accent-green)', inicial: 'R', info: '📊 ¿Qué hacer aquí?\nGenera reportes de conducta, incidencias y estadísticas de rendimiento listos para imprimir o enviar a orientación.\n\n✨ Ejemplo:\nCrea un reporte de indisciplina para un alumno que interrumpió la clase, y expórtalo en PDF.' },
+    { id: 'biblioteca', titulo: 'Biblioteca Docente', subtitulo: 'Entra y sorprendete con el contenido', color: 'var(--accent-darkred)', inicial: 'B', info: '📚 ¿Qué hacer aquí?\nExplora libros de texto, normativas, y formatos oficiales subidos por toda la comunidad.\n\n✨ Ejemplo:\nBusca "Plan de Estudios 2022", guárdalo en tus Favoritos (⭐) y tenlo a la mano en tu Aula Virtual.' },
+    { id: 'modulo-ia', titulo: 'Ahorra tiempo, pregúntale a la IA', subtitulo: 'Asistente pedagógico y generador', color: 'var(--accent-yellow)', inicial: 'IA', info: '🤖 ¿Qué hacer aquí?\nUsa Inteligencia Artificial para redactar planeaciones, exámenes o rúbricas en segundos.\n\n✨ Ejemplo:\nPídele: "Crea una rúbrica de 5 puntos para evaluar una maqueta sobre el ciclo del agua" y cópiala a Word.' },
+    { id: 'utilidades', titulo: 'Utilidades Docentes', subtitulo: 'Haz de tu clase una experiencia', color: '#607D8B', inicial: 'U', info: '🛠️ ¿Qué hacer aquí?\nHerramientas prácticas para gamificar tu clase y hacerla dinámica.\n\n✨ Ejemplo:\nUsa la Ruleta para elegir alumnos al azar para participar, o el Cronómetro gigante para una dinámica de equipos.' }
   ];
 
   const limpiarPaneles = () => { setVarkInfo(p => ({...p, visible: false})); setGuiaConductual(false); };
 
-  // CORRECCIÓN APLICADA AQUÍ: Restauramos las vistas donde la barra lateral sí debe aparecer
   const mostrarSidebar = vistaActual === 'inicio' || vistaActual === 'vista-grupo' || vistaActual === 'reportes';
 
   return (
@@ -279,17 +282,23 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
               <div className="tabs-nav"><span className="tab active">Módulos Globales</span></div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
                 {modulos.map((mod) => (
-                  <TutorialTooltip key={mod.id} mensaje={`Da clic para acceder a ${mod.titulo}`} esBloque={true} posicion="top">
-                    <div className="activity-card hover-scale" onClick={() => navegarModulo(mod.id)} style={{ cursor: 'pointer', margin: 0, transition: 'all 0.2s' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                        <div className="circle-icon" style={{ backgroundColor: 'var(--bg-app)', color: mod.color, border: `1px solid ${mod.color}` }}>{mod.inicial}</div>
-                        <div>
-                          <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>{mod.titulo}</h4>
-                          <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{mod.subtitulo}</p>
-                        </div>
+                  <div key={mod.id} className="activity-card hover-scale" style={{ margin: 0, transition: 'all 0.2s', position: 'relative' }}>
+                    <div onClick={() => navegarModulo(mod.id)} style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', paddingRight: '2rem' }}>
+                      <div className="circle-icon" style={{ backgroundColor: 'var(--bg-app)', color: mod.color, border: `1px solid ${mod.color}` }}>{mod.inicial}</div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>{mod.titulo}</h4>
+                        <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{mod.subtitulo}</p>
                       </div>
                     </div>
-                  </TutorialTooltip>
+                    {/* BOTÓN "i" DE INFORMACIÓN (Se abre con clic o se ve al pasar el ratón) */}
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); alert(mod.info); }}
+                      title={mod.info}
+                      style={{ position: 'absolute', top: '15px', right: '15px', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', cursor: 'help', fontSize: '1rem' }}
+                    >
+                      ℹ️
+                    </button>
+                  </div>
                 ))}
               </div>
               <style>{`.hover-scale:hover { transform: scale(1.03); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }`}</style>
@@ -302,7 +311,8 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
           {vistaActual === 'calendario' && <CalendarioEscolar onVolver={() => navegarModulo('inicio')} />}
           {vistaActual === 'reportes' && <ModuloReportes onVolver={() => navegarModulo('inicio')} setGuiaConductual={setGuiaConductual} />}
           
-          {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} />}
+          {/* AÑADIDO: Pasamos el grupoAEditar al Formulario para pre-rellenarlo */}
+          {vistaActual === 'crear-grupo' && <FormularioGrupo onVolver={() => navegarModulo('mis-grupos')} grupoAEditar={grupoAEditar} />}
           
           {vistaActual === 'mis-grupos' && (
             <div style={{ animation: 'fadeIn 0.3s' }}>
@@ -310,7 +320,12 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 <h2 style={{ margin: '0 0 0.5rem 0', color: 'var(--accent-blue)' }}>📋 Gestión y Asistencia</h2>
                 <p style={{ margin: 0, color: 'var(--text-muted)' }}>Selecciona un grupo para pasar lista o ver el registro VARK.</p>
               </div>
-              <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirGrupo} />
+              {/* AÑADIDO: Conectamos onEditarGrupo */}
+              <MisGrupos 
+                onCrearGrupo={() => { setGrupoAEditar(null); navegarModulo('crear-grupo'); }} 
+                onAbrirGrupo={abrirGrupo} 
+                onEditarGrupo={(grupo) => { setGrupoAEditar(grupo); navegarModulo('crear-grupo'); }} 
+              />
             </div>
           )}
 
@@ -318,7 +333,6 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
             <VistaGrupo key={`${grupoSeleccionado.id}-${grupoSeleccionado.tab}`} idGrupo={grupoSeleccionado.id} nombreGrupo={grupoSeleccionado.nombre} tabInicial={grupoSeleccionado.tab as any} onVolver={() => navegarModulo('mis-grupos')} onVarkChange={setVarkInfo} />
           )}
 
-          {/* NUEVAS VISTAS: MI AULA */}
           {vistaActual === 'mis-grupos-aula' && (
             <div className="mi-aula-theme" style={{ animation: 'fadeIn 0.3s', backgroundColor: 'var(--bg-app)', padding: '2rem', borderRadius: '24px', border: '2px dashed var(--accent-purple)' }}>
               <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
@@ -333,7 +347,7 @@ export default function Dashboard({ onLogout, onSwitchToAdmin }: { onLogout?: ()
                 .mi-aula-theme > div > div:first-child > button { display: none !important; }
                 .mi-aula-theme .activity-card button:nth-of-type(n+2) { display: none !important; }
               `}</style>
-              <MisGrupos onCrearGrupo={() => navegarModulo('crear-grupo')} onAbrirGrupo={abrirMiAula} modoAula={true} />
+              <MisGrupos onCrearGrupo={() => { setGrupoAEditar(null); navegarModulo('crear-grupo'); }} onAbrirGrupo={abrirMiAula} modoAula={true} />
             </div>
           )}
 

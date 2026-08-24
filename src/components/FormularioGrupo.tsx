@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
-export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) {
+export default function FormularioGrupo({ onVolver, grupoAEditar }: { onVolver: () => void, grupoAEditar?: any }) {
   const grados = ['1', '2', '3'];
   const grupos = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
   
@@ -14,27 +14,54 @@ export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) 
     return [...materiasBase, 'Química'].sort();
   };
 
+  // Catálogo Oficial Completo de Énfasis
   const enfasisMorelos = {
-    "TICs": ["Informática", "Diseño gráfico", "Ofimática"],
-    "Industrial": ["Diseño industrial", "Máquinas herramientas", "Estructuras metálicas (Herrería)", "Mecánica automotriz", "Electrónica", "Confección del vestido", "Carpintería", "Creación artesanal"],
-    "Construcción": ["Diseño arquitectónico", "Circuitos eléctricos"],
-    "Agropecuaria": ["Agricultura", "Pecuaria", "Apicultura"],
-    "Alimentos": ["Preparación e industrialización agrícola", "Preparación y conservación (Cocina)"],
-    "Salud y Servicios": ["Administración contable", "Turismo", "Estética y salud corporal"]
+    "Agropecuarias y pesqueras": [
+      "Agricultura", "Apicultura", "Pecuaria", "Acuicultura", 
+      "Silvicultura", "Ganadería", "Pesca"
+    ],
+    "Tecnologías de alimentos": [
+      "Preparación, conservación e industrialización de alimentos agrícolas",
+      "Preparación, conservación e industrialización de alimentos pecuarios cárnicos",
+      "Preparación, conservación e industrialización de alimentos pecuarios lácteos",
+      "Preparación, conservación e industrialización de alimentos agrícolas, cárnicos y lácteos",
+      "Procesamiento de productos pesqueros",
+      "Conservación y procesamiento de productos agrícolas",
+      "Conservación y procesamiento de productos cárnicos",
+      "Conservación y procesamiento de productos lácteos"
+    ],
+    "Tecnologías de producción": [
+      "Diseño industrial", "Máquinas-herramienta y sistemas de control", 
+      "Diseño de estructuras metálicas", "Diseño y mecánica automotriz", 
+      "Electrónica, comunicación y sistemas de control", 
+      "Confección del vestido e industria textil", "Carpintería e industria de la madera", 
+      "Creación artesanal", "Diseño y creación plástica", "Diseño y transporte marítimo", 
+      "Climatización y refrigeración", "Programación y control de sistemas"
+    ],
+    "Construcción e información": [
+      "Diseño arquitectónico", "Diseño de circuitos eléctricos", 
+      "Diseño de interiores", "Ductos y controles", "Diseño gráfico", "Informática"
+    ],
+    "Salud, servicios y recreación": [
+      "Administración contable", "Ofimática", "Estética y salud corporal", "Turismo"
+    ]
   };
 
-  const [grado, setGrado] = useState('1');
-  const [grupo, setGrupo] = useState('A');
-  const [materiasDisponibles, setMateriasDisponibles] = useState(obtenerMateriasPorGrado('1'));
-  const [disciplina, setDisciplina] = useState('Tecnología');
-  const [enfasis, setEnfasis] = useState('Ofimática');
-  const [ciclo, setCiclo] = useState('2026-2027');
+  // Si nos mandan un grupo a editar, inicializamos los estados con esa información
+  const [grado, setGrado] = useState(grupoAEditar ? grupoAEditar.grade : '1');
+  const [grupo, setGrupo] = useState(grupoAEditar ? grupoAEditar.section : 'A');
+  const [materiasDisponibles, setMateriasDisponibles] = useState(obtenerMateriasPorGrado(grupoAEditar ? grupoAEditar.grade : '1'));
+  const [disciplina, setDisciplina] = useState(grupoAEditar ? grupoAEditar.subject : 'Tecnología');
+  const [enfasis, setEnfasis] = useState(grupoAEditar?.emphasis ? grupoAEditar.emphasis : 'Ofimática');
+  const [ciclo, setCiclo] = useState(grupoAEditar ? grupoAEditar.schoolYear : '2026-2027');
+  
   const [guardando, setGuardando] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     const nuevasMaterias = obtenerMateriasPorGrado(grado);
     setMateriasDisponibles(nuevasMaterias);
+    // Solo cambiar la disciplina si la actual no está disponible en el nuevo grado
     if (!nuevasMaterias.includes(disciplina)) {
       setDisciplina(nuevasMaterias[0]);
     }
@@ -49,14 +76,13 @@ export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) 
       return;
     }
     
-    // Obtener el correo del maestro desde la sesión guardada
     const sessionLocal = localStorage.getItem('aulaPlusSession');
     const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
     const userEmail = sessionData?.user?.email || sessionData?.email || '';
 
     setGuardando(true);
     try {
-      // Evitar duplicados pero solo buscando entre los grupos de ESTE maestro
+      // Buscar colisiones
       const q = query(
         collection(db, 'groups'), 
         where('docenteEmail', '==', userEmail),
@@ -67,14 +93,16 @@ export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) 
       );
       const snapshot = await getDocs(q);
       
-      if (!snapshot.empty) {
+      // Si estamos editando, ignoramos la colisión si se trata del MISMO documento
+      const colision = snapshot.docs.find(d => d.id !== (grupoAEditar?.id || ''));
+      
+      if (colision) {
         setErrorMsg(`El grupo ${grado}° ${grupo} de ${disciplina} ya está registrado en el ciclo ${ciclo}.`);
         setGuardando(false);
         return;
       }
       
-      // Guardar el nuevo grupo inyectando el correo del maestro
-      await addDoc(collection(db, 'groups'), {
+      const datosGuardar = {
         name: `${grado}° ${grupo}`,
         grade: grado,
         section: grupo,
@@ -82,9 +110,19 @@ export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) 
         emphasis: disciplina === 'Tecnología' ? enfasis : '',
         schoolYear: ciclo,
         docenteEmail: userEmail,
-        createdAt: serverTimestamp(),
         active: true,
-      });
+      };
+
+      if (grupoAEditar) {
+        // Lógica de Edición
+        await updateDoc(doc(db, 'groups', grupoAEditar.id), datosGuardar);
+      } else {
+        // Lógica de Creación
+        await addDoc(collection(db, 'groups'), {
+          ...datosGuardar,
+          createdAt: serverTimestamp()
+        });
+      }
       onVolver();
     } catch (error) {
       console.error("Error al guardar:", error);
@@ -97,8 +135,8 @@ export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) 
     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.5rem' }}>Crear Nuevo Grupo</h3>
-          <p style={{ color: 'var(--text-muted)', margin: '0.2rem 0 0 0', fontSize: '0.9rem' }}>Configuración Fase 6 (Morelos)</p>
+          <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.5rem' }}>{grupoAEditar ? '✏️ Editar Grupo' : '✨ Crear Nuevo Grupo'}</h3>
+          <p style={{ color: 'var(--text-muted)', margin: '0.2rem 0 0 0', fontSize: '0.9rem' }}>Configuración Fase 6 (Catálogo Técnico Completo)</p>
         </div>
         <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer' }}>
           ✕ Cancelar
@@ -146,7 +184,7 @@ export default function FormularioGrupo({ onVolver }: { onVolver: () => void }) 
         {errorMsg && <div className="error-msg"><span>⚠️</span> {errorMsg}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
           <button type="submit" disabled={guardando} className="pill-btn" style={{ backgroundColor: guardando ? 'var(--text-muted)' : 'var(--accent-blue)', color: 'white', border: 'none', padding: '0.8rem 2.5rem', fontSize: '1rem', cursor: guardando ? 'not-allowed' : 'pointer' }}>
-            {guardando ? 'Validando y Guardando...' : 'Guardar Grupo'}
+            {guardando ? 'Validando y Guardando...' : (grupoAEditar ? '💾 Actualizar Grupo' : 'Guardar Grupo')}
           </button>
         </div>
       </form>

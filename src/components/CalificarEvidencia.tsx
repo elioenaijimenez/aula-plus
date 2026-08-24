@@ -10,8 +10,6 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [calificaciones, setCalificaciones] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(true);
-  
-  // CORRECCIÓN: Se eliminó la variable datosGrupo que no se usaba
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,19 +52,46 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
   }, [idGrupo, evidencia]);
 
   const guardarCalificacionNube = async (idAlumno: string, puntaje: number) => {
-    setCalificaciones(prev => ({ ...prev, [idAlumno]: puntaje }));
+    // CANDADO ESTRICTO: Nunca menor a 0, nunca mayor a 10.
+    let califSegura = puntaje;
+    if (califSegura < 0) califSegura = 0;
+    if (califSegura > 10) califSegura = 10;
+
+    setCalificaciones(prev => ({ ...prev, [idAlumno]: califSegura }));
     const refEvidencia = doc(db, `groups/${idGrupo}/evidences`, evidencia.id);
     await updateDoc(refEvidencia, {
-      [`calificaciones.${idAlumno}`]: puntaje
+      [`calificaciones.${idAlumno}`]: califSegura
     });
   };
 
   const isRangoPequeno = (evidencia.puntajeMaximo - evidencia.puntajeMinimo) <= 15;
 
   const renderControlesCalificacion = (idAlumno: string, calActual: number) => {
+    // Forzamos visualmente que el máximo permitido sea 10
+    const maximoSeguro = Math.min(evidencia.puntajeMaximo || 10, 10);
+    
     if (isRangoPequeno) {
       const botones = [];
-      for (let i = evidencia.puntajeMinimo; i <= evidencia.puntajeMaximo; i++) {
+      
+      // UX MAGIA: Si el mínimo es 5 o 6, de todos modos agregamos un botón '0' aislado para "No entregó"
+      if (evidencia.puntajeMinimo > 0) {
+        botones.push(
+          <button
+            key={0}
+            onClick={() => guardarCalificacionNube(idAlumno, 0)}
+            className={`btn-calif ${calActual === 0 ? 'active-red' : ''}`}
+            style={{ marginRight: '15px' }}
+            title="No entregó / Anulado"
+          >
+            0
+          </button>
+        );
+      }
+
+      // Resto de los botones limitados a un máximo de 10
+      for (let i = evidencia.puntajeMinimo; i <= maximoSeguro; i++) {
+        if (i === 0 && evidencia.puntajeMinimo > 0) continue; // Evita duplicar el 0
+        
         botones.push(
           <button
             key={i}
@@ -83,13 +108,20 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <input 
             type="number" 
-            className="score-input"
-            min={evidencia.puntajeMinimo}
-            max={evidencia.puntajeMaximo}
+            className="search-input"
+            style={{ width: '70px', textAlign: 'center', fontSize: '1.2rem', fontWeight: 'bold', border: '2px solid var(--accent-blue)', borderRadius: '12px', padding: '0.4rem' }}
+            min={0}
+            max={10}
             value={calActual}
-            onChange={(e) => guardarCalificacionNube(idAlumno, Number(e.target.value))}
+            onChange={(e) => {
+              // Candado directo al teclear
+              let val = Number(e.target.value);
+              if (val > 10) val = 10;
+              if (val < 0) val = 0;
+              guardarCalificacionNube(idAlumno, val);
+            }}
           />
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 'bold' }}>/ {evidencia.puntajeMaximo}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 'bold' }}>/ {maximoSeguro}</span>
         </div>
       );
     }
@@ -108,7 +140,11 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
           background: var(--accent-blue); color: white; border-color: var(--accent-blue);
           transform: scale(1.1); box-shadow: 0 4px 10px rgba(28, 81, 255, 0.3); z-index: 2;
         }
-        .btn-calif:hover:not(.active) { background: var(--bg-input); }
+        .btn-calif.active-red {
+          background: var(--accent-red); color: white; border-color: var(--accent-red);
+          transform: scale(1.1); box-shadow: 0 4px 10px rgba(255, 77, 79, 0.3); z-index: 2;
+        }
+        .btn-calif:hover:not(.active):not(.active-red) { background: var(--bg-input); }
       `}</style>
 
       <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)', marginBottom: '2rem' }}>
@@ -140,7 +176,7 @@ export default function CalificarEvidencia({ idGrupo, evidencia, onVolver }: { i
         {cargando ? <div className="loader"></div> : alumnos.map((alumno) => {
           const calActual = calificaciones[alumno.id] !== undefined ? calificaciones[alumno.id] : evidencia.puntajeMinimo;
           return (
-            <div key={alumno.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem 1rem', backgroundColor: 'var(--bg-input)', borderRadius: '12px', borderLeft: `4px solid ${calActual === evidencia.puntajeMaximo ? 'var(--accent-green)' : calActual === evidencia.puntajeMinimo ? 'var(--accent-red)' : 'var(--accent-yellow)'}`, flexWrap: 'wrap', gap: '1rem' }}>
+            <div key={alumno.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem 1rem', backgroundColor: 'var(--bg-input)', borderRadius: '12px', borderLeft: `4px solid ${calActual === Math.min(evidencia.puntajeMaximo, 10) ? 'var(--accent-green)' : calActual === 0 ? 'var(--accent-red)' : 'var(--accent-yellow)'}`, flexWrap: 'wrap', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <span style={{ color: 'var(--text-muted)', fontWeight: 600, width: '25px' }}>{alumno.studentNumber.toString().padStart(2, '0')}</span>
                 <span style={{ fontWeight: 500 }}>{alumno.fullName}</span>
