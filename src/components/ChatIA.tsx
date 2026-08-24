@@ -7,12 +7,14 @@ interface Mensaje { rol: 'user' | 'ia'; texto: string; }
 interface GrupoInfo { name: string; grade: string; subject: string; emphasis?: string; }
 interface MemoriaEscolar { escuela: string; ubicacion: string; docente: string; revisor: string; }
 interface ChatGuardado { id: string; titulo: string; mensajes: Mensaje[]; updatedAt: any; }
+interface ContextoAula { entorno: string; grupo: string; reglas: string; }
 
 export default function ChatIA() {
   const [userEmail, setUserEmail] = useState('');
   const [docenteNombre, setDocenteNombre] = useState('Colega Docente');
   const [contextoDocente, setContextoDocente] = useState('');
   const [memoria, setMemoria] = useState<MemoriaEscolar>({ escuela: 'Escuela Secundaria', ubicacion: 'México', docente: 'Docente', revisor: 'Dirección' });
+  const [contextoDUA, setContextoDUA] = useState<ContextoAula | null>(null);
   
   // Estados de control
   const [tieneGrupos, setTieneGrupos] = useState<boolean | null>(null);
@@ -54,7 +56,7 @@ export default function ChatIA() {
       let nombre = sessionData?.user?.nombre || '';
       setUserEmail(email);
 
-      // 1. Validar que el maestro tenga grupos (FILTRADO ESTRICTO ANTI-ALUCINACIONES)
+      // 1. Validar que el maestro tenga grupos
       let resumenGrupos = '';
       try {
         const qGrupos = query(collection(db, 'groups'), where('docenteEmail', '==', email));
@@ -62,7 +64,7 @@ export default function ChatIA() {
         
         if (snap.empty) {
           setTieneGrupos(false);
-          return; // Detenemos la carga, no puede usar la IA sin grupos
+          return; 
         }
         
         setTieneGrupos(true);
@@ -76,22 +78,30 @@ export default function ChatIA() {
         console.error("Error al leer grupos:", e);
       }
 
-      // 2. Cargar perfil y memoria escolar
+      // 2. Cargar perfil, memoria escolar y CONTEXTO VIVO (DUA)
       let datosMemoria: MemoriaEscolar = { escuela: 'Escuela Secundaria', ubicacion: 'México', docente: nombre || 'Docente', revisor: 'Dirección' };
+      let datosContextoAula: ContextoAula | null = null;
+
       try {
         const docMemoria = await getDoc(doc(db, 'teacher_settings', email));
-        if (docMemoria.exists() && docMemoria.data().memoriaEscolar) {
-          const m = docMemoria.data().memoriaEscolar;
-          datosMemoria = { escuela: m.escuela || 'Escuela Secundaria', ubicacion: m.ubicacion || 'México', docente: m.docente || nombre || 'Docente', revisor: m.revisor || 'Dirección' };
-          if (m.docente) nombre = m.docente;
+        if (docMemoria.exists()) {
+          if (docMemoria.data().memoriaEscolar) {
+            const m = docMemoria.data().memoriaEscolar;
+            datosMemoria = { escuela: m.escuela || 'Escuela', ubicacion: m.ubicacion || 'México', docente: m.docente || nombre || 'Docente', revisor: m.revisor || 'Dirección' };
+            if (m.docente) nombre = m.docente;
+          }
+          if (docMemoria.data().contextoAula) {
+            datosContextoAula = docMemoria.data().contextoAula;
+            setContextoDUA(datosContextoAula);
+          }
         }
-      } catch (e) { console.error("Error al leer memoria escolar:", e); }
+      } catch (e) { console.error("Error al leer datos de la nube:", e); }
       
       setMemoria(datosMemoria);
       const primerNombre = nombre ? nombre.split(' ')[0] : 'Docente';
       setDocenteNombre(nombre || 'Docente');
 
-      // 3. Crear directiva maestra
+      // 3. Crear directiva maestra (Inyección silenciosa del DUA)
       const directiva = `
 [CONTEXTO DEL USUARIO]:
 - Nombre del Docente: ${nombre || 'Profesor/a'}
@@ -99,10 +109,18 @@ export default function ChatIA() {
 - Escuela: ${datosMemoria.escuela} (${datosMemoria.ubicacion})
 - Grupos y Asignaturas a su cargo: ${resumenGrupos}
 
+[CONTEXTO BASE DEL AULA (DUA E INCLUSIÓN)]:
+${datosContextoAula ? `
+- Infraestructura y Entorno: ${datosContextoAula.entorno || 'No especificado'}
+- Barreras y Ritmos del Grupo: ${datosContextoAula.grupo || 'No especificado'}
+- Reglas Pedagógicas del Docente: ${datosContextoAula.reglas || 'No especificadas'}
+` : '- El docente no ha especificado un contexto base aún. Sugiere actividades estándar.'}
+
 [INSTRUCCIONES DE TONO Y RESPUESTA]:
-1. Dirígete al docente de manera respetuosa llamándolo por su nombre (${nombre ? `Prof. ${primerNombre}` : 'Profesor'}).
-2. Tus respuestas deben ser técnicamente precisas, con fundamento pedagógico, pero redactadas con calidez humana.
-3. Al final de tu explicación, incluye SIEMPRE una breve sección titulada "💡 Consejo de aplicación en clase", ofreciendo una recomendación didáctica aterrizada a SUS asignaturas registradas.
+1. Dirígete al docente de manera respetuosa y empática llamándolo por su nombre (${nombre ? `Prof. ${primerNombre}` : 'Profesor'}).
+2. Tus respuestas deben ser técnicamente precisas y fundamentadas en la Nueva Escuela Mexicana.
+3. Toma en cuenta ABSOLUTAMENTE el [CONTEXTO BASE DEL AULA] para proponer ajustes razonables, metodologías o consejos que se adapten a las limitaciones de recursos o a las barreras de aprendizaje reales del maestro.
+4. Al final de tu explicación, incluye SIEMPRE una breve sección titulada "💡 Consejo de aplicación en clase", ofreciendo una recomendación didáctica aterrizada a SUS asignaturas registradas y su contexto particular.
       `.trim();
       setContextoDocente(directiva);
 
@@ -120,7 +138,7 @@ export default function ChatIA() {
     setChatActivoId(null);
     setMensajes([{ 
       rol: 'ia', 
-      texto: `¡Hola, ${nombreDocente || docenteNombre}! 🧠\n\nSoy tu asistente pedagógico Aula+. He leído tus grupos actuales. ¿Qué tema, duda curricular o estrategia te gustaría consultar hoy?` 
+      texto: `¡Hola, ${nombreDocente || docenteNombre}! 🧠\n\nSoy tu asistente pedagógico Aula+. He analizado tu contexto escolar y tus grupos actuales. ¿Qué tema, duda curricular o estrategia te gustaría consultar hoy?` 
     }]);
     setMenuHistorialAbierto(false);
   };
@@ -143,6 +161,7 @@ export default function ChatIA() {
 
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      // Solo enviamos el contexto completo en el primer mensaje de la IA para ahorrar tokens
       const promptCompleto = nuevosMensajes.length <= 2 
         ? `${contextoDocente}\n\n[CONSULTA DEL DOCENTE]:\n${textoUsuario}`
         : textoUsuario;
@@ -164,7 +183,6 @@ export default function ChatIA() {
 
       // GUARDADO EN FIREBASE
       if (!chatActivoId) {
-        // Chat Nuevo
         const nuevoDoc = await addDoc(collection(db, 'teacher_chats'), {
           docenteEmail: userEmail,
           titulo: textoUsuario.substring(0, 40) + '...',
@@ -174,7 +192,6 @@ export default function ChatIA() {
         setChatActivoId(nuevoDoc.id);
         cargarHistorialNube(userEmail);
       } else {
-        // Actualizar chat existente
         await updateDoc(doc(db, 'teacher_chats', chatActivoId), {
           mensajes: mensajesFinales,
           updatedAt: serverTimestamp()
@@ -193,7 +210,6 @@ export default function ChatIA() {
     alert("📋 ¡Respuesta copiada al portapapeles!");
   };
 
-  // EXPORTACIÓN MAGISTRAL A PDF NATIVO PARA MAC Y WINDOWS
   const exportarChatPDF = () => {
     if (mensajes.length <= 1) return alert("No hay suficientes mensajes en el chat para exportar.");
 
@@ -252,7 +268,6 @@ export default function ChatIA() {
     }
   };
 
-  // PANTALLA DE BLOQUEO SI NO HAY GRUPOS
   if (tieneGrupos === false) {
     return (
       <div style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--bg-app)', borderRadius: '24px', border: '2px dashed var(--accent-red)', animation: 'fadeIn 0.4s' }}>
@@ -267,21 +282,21 @@ export default function ChatIA() {
   }
 
   if (tieneGrupos === null) {
-    return <div className="loader"></div>;
+    return <div className="loader" style={{ marginTop: '5rem' }}></div>;
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)', borderRadius: '24px', border: '1px solid var(--border-color)', height: '68vh', minHeight: '550px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)', borderRadius: '24px', border: '1px solid var(--border-color)', height: '70vh', minHeight: '550px', position: 'relative', overflow: 'hidden' }}>
       
       {/* MENÚ LATERAL DE HISTORIAL */}
       {menuHistorialAbierto && (
         <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '300px', backgroundColor: 'var(--bg-panel)', zIndex: 10, borderRight: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.2s', boxShadow: '4px 0 15px rgba(0,0,0,0.05)' }}>
           <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h4 style={{ margin: 0, color: 'var(--accent-blue)' }}>Tus Consultas</h4>
-            <button onClick={() => setMenuHistorialAbierto(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+            <button onClick={() => setMenuHistorialAbierto(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--text-muted)' }}>✕</button>
           </div>
           <div style={{ padding: '1rem' }}>
-            <button onClick={() => iniciarNuevaConversacion()} className="pill-btn" style={{ width: '100%', background: 'var(--accent-purple)', color: 'white' }}>+ Nueva Conversación</button>
+            <button onClick={() => iniciarNuevaConversacion()} className="pill-btn" style={{ width: '100%', background: 'var(--accent-purple)', color: 'white', fontWeight: 'bold' }}>+ Nueva Conversación</button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 1rem 1rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {historial.length === 0 ? (
@@ -303,52 +318,55 @@ export default function ChatIA() {
         </div>
       )}
 
-      {/* CABECERA CON BOTONES */}
-      <div style={{ padding: '0.8rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--bg-panel)', flexWrap: 'wrap', gap: '0.5rem' }}>
+      {/* CABECERA CON BOTONES Y BADGE DE CONTEXTO */}
+      <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--bg-panel)', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button onClick={() => setMenuHistorialAbierto(true)} className="pill-btn" style={{ padding: '0.4rem 0.8rem', background: 'var(--bg-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
+          <button onClick={() => setMenuHistorialAbierto(true)} className="pill-btn" style={{ padding: '0.5rem 1rem', background: 'var(--bg-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
             ☰ Historial
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span style={{ fontSize: '1.2rem' }}>🎓</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+            <span style={{ fontSize: '1.5rem' }}>🎓</span>
             <div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-main)' }}>Asistente Aula+</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>● Configurado para ti</div>
+              <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>Asistente Aula+</div>
+              {/* MAGIA UX: Badge dinámico que muestra si la IA está leyendo el contexto o no */}
+              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: contextoDUA?.entorno ? 'var(--accent-purple)' : 'var(--text-muted)', backgroundColor: contextoDUA?.entorno ? 'rgba(156, 39, 176, 0.1)' : 'transparent', padding: '0.1rem 0.5rem', borderRadius: '50px', display: 'inline-block', marginTop: '0.2rem' }}>
+                {contextoDUA?.entorno ? '✨ IA Contextualizada (DUA Activo)' : '● Modo Genérico'}
+              </div>
             </div>
           </div>
         </div>
         
         <TutorialTooltip mensaje="Genera un PDF oficial de esta consulta. Universalmente compatible con Mac y Windows." posicion="left">
-          <button onClick={exportarChatPDF} className="pill-btn" style={{ fontSize: '0.8rem', padding: '0.4rem 1rem', background: 'var(--accent-blue)', color: 'white', border: 'none' }}>
+          <button onClick={exportarChatPDF} className="pill-btn" style={{ fontSize: '0.9rem', padding: '0.5rem 1rem', background: 'var(--accent-blue)', color: 'white', border: 'none', fontWeight: 'bold' }}>
             📄 Exportar a PDF
           </button>
         </TutorialTooltip>
       </div>
 
       {/* ÁREA DE MENSAJES */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem', backgroundColor: 'var(--bg-app)' }}>
         {mensajes.map((msg, i) => (
           <div key={i} style={{ alignSelf: msg.rol === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.3rem', marginLeft: '0.5rem', textAlign: msg.rol === 'user' ? 'right' : 'left' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem', marginLeft: '0.5rem', textAlign: msg.rol === 'user' ? 'right' : 'left', fontWeight: 'bold' }}>
               {msg.rol === 'user' ? 'Tú' : 'Asistente Aula+'}
             </div>
             <div style={{
               backgroundColor: msg.rol === 'user' ? 'var(--accent-purple)' : 'var(--bg-panel)',
               color: msg.rol === 'user' ? 'white' : 'var(--text-main)',
               padding: '1.2rem',
-              borderRadius: '18px',
+              borderRadius: msg.rol === 'user' ? '18px 18px 0 18px' : '18px 18px 18px 0',
               border: msg.rol === 'ia' ? '1px solid var(--border-color)' : 'none',
               whiteSpace: 'pre-wrap',
               lineHeight: '1.6',
-              fontSize: '0.95rem',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+              fontSize: '1rem',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.05)'
             }}>
               {msg.texto}
             </div>
 
             {msg.rol === 'ia' && (
-              <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.3rem', marginLeft: '0.5rem' }}>
-                <button onClick={() => copiarPortapapeles(msg.texto)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer', padding: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem', marginLeft: '0.5rem' }}>
+                <button onClick={() => copiarPortapapeles(msg.texto)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.8rem', cursor: 'pointer', padding: 0, fontWeight: 'bold' }} className="hover-opacity">
                   📋 Copiar respuesta
                 </button>
               </div>
@@ -356,8 +374,8 @@ export default function ChatIA() {
           </div>
         ))}
         {escribiendo && (
-          <div style={{ alignSelf: 'flex-start', backgroundColor: 'var(--bg-panel)', padding: '0.8rem 1.2rem', borderRadius: '16px', border: '1px solid var(--border-color)', color: 'var(--accent-purple)', fontSize: '0.85rem' }}>
-            Pensando y contextualizando tu respuesta... 🧠
+          <div style={{ alignSelf: 'flex-start', backgroundColor: 'var(--bg-panel)', padding: '1rem 1.5rem', borderRadius: '18px 18px 18px 0', border: '1px solid var(--border-color)', color: 'var(--accent-purple)', fontSize: '0.9rem', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+            <span className="pulse-fast">Pensando y contextualizando tu respuesta... 🧠</span>
           </div>
         )}
         <div ref={mensajesEndRef} />
@@ -372,9 +390,9 @@ export default function ChatIA() {
           value={objetivo} 
           onChange={e => setObjetivo(e.target.value)} 
           disabled={escribiendo}
-          style={{ flex: 1, marginBottom: 0, border: '1px solid var(--accent-purple)' }}
+          style={{ flex: 1, margin: 0, border: '2px solid var(--accent-purple)', padding: '1rem', fontSize: '1rem', borderRadius: '12px' }}
         />
-        <button type="submit" disabled={escribiendo || !objetivo.trim()} className="pill-btn" style={{ background: 'var(--accent-purple)', color: 'white', padding: '0.8rem 1.5rem', height: '100%', whiteSpace: 'nowrap' }}>
+        <button type="submit" disabled={escribiendo || !objetivo.trim()} className="pill-btn hover-opacity" style={{ background: 'var(--accent-purple)', color: 'white', padding: '1rem 2rem', height: '100%', whiteSpace: 'nowrap', fontWeight: 'bold', fontSize: '1rem' }}>
           Enviar
         </button>
       </form>
