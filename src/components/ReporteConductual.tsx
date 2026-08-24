@@ -17,7 +17,10 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
 
   const [vista, setVista] = useState<'panel' | 'formulario'>('panel');
   
-  const [idAlumnoSelec, setIdAlumnoSelec] = useState('');
+  // MAGIA UX: Buscador inteligente en lugar de select simple
+  const [busquedaAlumno, setBusquedaAlumno] = useState('');
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<Alumno | null>(null);
+
   const [tipoIncidencia, setTipoIncidencia] = useState('Indisciplina o Falta a Acuerdos');
   const [descripcion, setDescripcion] = useState('');
   const [medidas, setMedidas] = useState('');
@@ -59,23 +62,36 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     fetchData();
   }, [idGrupo]);
 
-  const abrirFormulario = (idAl: string = '') => {
-    setIdAlumnoSelec(idAl); setDescripcion(''); setMedidas(''); setCompromisos(''); setFecha(obtenerFechaLocal());
+  const manejarBusqueda = (val: string) => {
+    // Evitamos caracteres extraños
+    const cleanVal = val.replace(/[^\w\sñÑáéíóúÁÉÍÓÚ]/gi, '');
+    setBusquedaAlumno(cleanVal);
+    const encontrado = alumnos.find(a => a.fullName.toLowerCase() === cleanVal.toLowerCase());
+    setAlumnoSeleccionado(encontrado || null);
+  };
+
+  const limpiarBusqueda = () => {
+    setAlumnoSeleccionado(null);
+    setBusquedaAlumno('');
+  };
+
+  const abrirFormulario = () => {
+    limpiarBusqueda(); 
+    setDescripcion(''); setMedidas(''); setCompromisos(''); setFecha(obtenerFechaLocal());
     setVista('formulario');
   };
 
   const guardarIncidencia = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!idAlumnoSelec) { alert("Selecciona un alumno."); return; }
+    if (!alumnoSeleccionado) { alert("Debes buscar y seleccionar a un alumno primero."); return; }
     
     setGuardando(true);
-    const alumnoObj = alumnos.find(a => a.id === idAlumnoSelec);
     const timestampFolio = Math.floor(Date.now() / 1000).toString();
-    const folioUnico = `BIT-${timestampFolio}-${alumnoObj?.fullName.charAt(0)}`;
+    const folioUnico = `BIT-${timestampFolio}-${alumnoSeleccionado.fullName.charAt(0)}`;
 
     try {
       await addDoc(collection(db, `groups/${idGrupo}/incidences`), {
-        folio: folioUnico, idAlumno: idAlumnoSelec, nombreAlumno: alumnoObj?.fullName,
+        folio: folioUnico, idAlumno: alumnoSeleccionado.id, nombreAlumno: alumnoSeleccionado.fullName,
         fecha, tipo: tipoIncidencia, descripcion, medidas, compromisos, createdAt: serverTimestamp()
       });
       alert('✅ Bitácora registrada con éxito y valor legal.');
@@ -92,7 +108,6 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     return `${partes[2]}-${meses[parseInt(partes[1], 10) - 1]}-${partes[0]}`;
   };
 
-  // Función genérica para obtener el perfil desde la nube
   const obtenerPerfilNube = async () => {
     if (!userEmail) return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
     try {
@@ -108,7 +123,6 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
   };
 
   const exportarBitacoraWord = async (inc: Incidencia) => {
-    // EXTRACCIÓN DE LA NUBE
     const perfilNube = await obtenerPerfilNube();
     const nombreDocente = perfilNube.nombre || 'Docente';
     const escuela = perfilNube.escuela || 'Escuela no registrada';
@@ -168,12 +182,11 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     const blob = new Blob(['\uFEFF' + htmlContent], { type: 'application/msword;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `Bitacora_${inc.nombreAlumno}_${inc.fecha}.doc`);
+    link.setAttribute('download', `Bitacora_${inc.nombreAlumno.replace(/[^a-zA-Z0-9]/g, '_')}_${inc.fecha}.doc`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const exportarBitacoraPDF = async (inc: Incidencia) => {
-    // EXTRACCIÓN DE LA NUBE
     const perfilNube = await obtenerPerfilNube();
     const nombreDocente = perfilNube.nombre || 'Docente';
     const escuela = perfilNube.escuela || 'Escuela no registrada';
@@ -183,13 +196,11 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
     const docRef = new jsPDF();
     let posY = 20;
 
-    // Folio
     docRef.setFontSize(9);
     docRef.setTextColor(85, 85, 85);
     docRef.text(`FOLIO INTERNO: ${inc.folio}`, 196, posY, { align: 'right' });
     posY += 10;
 
-    // Encabezado
     docRef.setFontSize(16);
     docRef.setFont("helvetica", "bold");
     docRef.setTextColor(28, 81, 255);
@@ -274,7 +285,7 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
        posY += 4;
     });
 
-    docRef.save(`Bitacora_${inc.nombreAlumno}_${inc.fecha}.pdf`);
+    docRef.save(`Bitacora_${inc.nombreAlumno.replace(/[^a-zA-Z0-9]/g, '_')}_${inc.fecha}.pdf`);
   };
 
   const conteoPorAlumno: Record<string, { nombre: string, total: number }> = {};
@@ -298,10 +309,30 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
           <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: '200px' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>1. Alumno Principal Involucrado</label>
-              <select className="search-input" required value={idAlumnoSelec} onChange={e => setIdAlumnoSelec(e.target.value)} style={{ cursor: 'pointer' }}>
-                <option value="">-- Selecciona un alumno --</option>
-                {alumnos.map(a => <option key={a.id} value={a.id}>{a.fullName}</option>)}
-              </select>
+              
+              {!alumnoSeleccionado ? (
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="text" 
+                    list="lista-alumnos-cond" 
+                    className="search-input" 
+                    placeholder="Escribe el apellido o nombre..." 
+                    value={busquedaAlumno}
+                    onChange={e => manejarBusqueda(e.target.value)}
+                    style={{ border: '2px solid var(--accent-yellow)', fontSize: '1.1rem', width: '100%' }}
+                  />
+                  <datalist id="lista-alumnos-cond">
+                    {alumnos.map(a => <option key={a.id} value={a.fullName} />)}
+                  </datalist>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', backgroundColor: 'var(--bg-input)', padding: '0.8rem 1.2rem', borderRadius: '12px', borderLeft: '4px solid var(--accent-yellow)' }}>
+                  <span style={{ fontWeight: 'bold', flex: 1 }}>{alumnoSeleccionado.fullName}</span>
+                  <button type="button" onClick={limpiarBusqueda} className="pill-btn" style={{ background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none', padding: '0.3rem 0.8rem', fontSize: '0.85rem' }}>
+                    ✕ Cambiar
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>Fecha del Hecho</label>
@@ -345,7 +376,7 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
             <textarea className="search-input" required value={compromisos} onChange={e => setCompromisos(e.target.value)} placeholder="Ej. El tutor se compromete a dialogar diariamente..." style={{ minHeight: '80px', resize: 'vertical' }} />
           </div>
 
-          <button type="submit" disabled={guardando} className="pill-btn" style={{ background: 'var(--accent-yellow)', color: '#000', alignSelf: 'flex-start', padding: '1rem 3rem', fontSize: '1rem' }}>
+          <button type="submit" disabled={guardando} className="pill-btn" style={{ background: 'var(--accent-yellow)', color: '#000', alignSelf: 'flex-start', padding: '1rem 3rem', fontSize: '1rem', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(255, 193, 7, 0.3)' }}>
             {guardando ? 'Firmando y Guardando...' : '💾 Guardar Bitácora'}
           </button>
         </form>
@@ -355,6 +386,35 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
 
   return (
     <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)', animation: 'fadeIn 0.3s' }}>
+      
+      <style>{`
+        .cuaderno-paper {
+          background-color: #fcfcfc;
+          background-image: linear-gradient(transparent 95%, #e1e1e1 5%);
+          background-size: 100% 1.5rem;
+          border-left: 4px solid #ff6b6b;
+          padding: 1.5rem 1.5rem 1.5rem 2.5rem;
+          border-radius: 4px 16px 16px 4px;
+          box-shadow: 3px 3px 15px rgba(0,0,0,0.05);
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          transition: transform 0.2s;
+        }
+        .cuaderno-paper:hover {
+          transform: translateY(-2px);
+          box-shadow: 4px 4px 18px rgba(0,0,0,0.08);
+        }
+        .cuaderno-paper::before {
+          content: '';
+          position: absolute;
+          top: 0; bottom: 0; left: 0.5rem;
+          width: 1px;
+          background-color: rgba(255, 107, 107, 0.5);
+        }
+      `}</style>
+
       <button onClick={onVolver} className="pill-btn" style={{ marginBottom: '1rem', background: 'var(--bg-input)', color: 'var(--text-muted)' }}>← Cambiar de Reporte</button>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
@@ -364,7 +424,7 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
         </div>
         
         <TutorialTooltip mensaje="Crea un nuevo documento oficial para respaldar acuerdos con alumnos o tutores.">
-          <button onClick={() => abrirFormulario()} className="pill-btn" style={{ backgroundColor: 'var(--accent-yellow)', color: '#000' }}>➕ Registrar Incidencia</button>
+          <button onClick={() => abrirFormulario()} className="pill-btn" style={{ backgroundColor: 'var(--accent-yellow)', color: '#000', fontWeight: 'bold' }}>➕ Registrar Incidencia</button>
         </TutorialTooltip>
       </div>
 
@@ -385,18 +445,18 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
       {incidencias.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>El grupo mantiene un comportamiento ejemplar. No hay incidencias.</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {incidencias.map(inc => (
-            <div key={inc.id} className="activity-card" style={{ flexDirection: 'column', alignItems: 'flex-start', backgroundColor: 'var(--bg-input)' }}>
+            <div key={inc.id} className="cuaderno-paper">
               
               <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                    <span style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '0.2rem 0.5rem', borderRadius: '5px', fontSize: '0.75rem', fontFamily: 'monospace' }}>Folio: {inc.folio}</span>
+                    <span style={{ backgroundColor: '#f0f0f0', padding: '0.2rem 0.6rem', borderRadius: '5px', fontSize: '0.75rem', fontFamily: 'monospace', border: '1px solid #ddd' }}>Folio: {inc.folio}</span>
                     <span style={{ color: 'var(--accent-yellow)', fontSize: '0.85rem', fontWeight: 'bold' }}>{formatearFecha(inc.fecha)}</span>
                   </div>
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem' }}>{inc.nombreAlumno}</h4>
-                  <span style={{ color: 'var(--text-main)', fontSize: '0.85rem', backgroundColor: 'var(--bg-panel)', padding: '0.3rem 0.8rem', borderRadius: '50px', border: '1px solid var(--border-color)' }}>{inc.tipo}</span>
+                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem', color: '#222' }}>{inc.nombreAlumno}</h4>
+                  <span style={{ color: 'var(--text-main)', fontSize: '0.85rem', backgroundColor: '#fff', padding: '0.3rem 0.8rem', borderRadius: '50px', border: '1px solid #ccc' }}>{inc.tipo}</span>
                 </div>
                 
                 <TutorialTooltip mensaje="Descarga el acta lista para imprimir y solicitar la firma de Trabajo Social o Padres de familia." posicion="left">
@@ -408,8 +468,8 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
                 </TutorialTooltip>
               </div>
 
-              <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--bg-panel)', borderRadius: '12px', width: '100%' }}>
-                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>"{inc.descripcion}"</p>
+              <div style={{ marginTop: '1.2rem', padding: '0', width: '100%' }}>
+                <p style={{ margin: 0, fontSize: '0.95rem', color: '#444', fontStyle: 'italic', lineHeight: '1.5' }}>"{inc.descripcion}"</p>
               </div>
 
             </div>

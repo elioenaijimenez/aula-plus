@@ -6,7 +6,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 interface Alumno { id: string; fullName: string; studentNumber: number; }
-interface Evidencia { id: string; titulo: string; descripcion: string; trimestre: string; fechaActividad: string; puntajeMinimo: number; puntajeMaximo: number; calificaciones: Record<string, number>; numero?: number; createdAt?: any; }
+// AÑADIDO: Agregamos la propiedad 'tipo' a la interfaz para poder identificar los avisos
+interface Evidencia { id: string; titulo: string; descripcion: string; tipo?: string; trimestre: string; fechaActividad: string; puntajeMinimo: number; puntajeMaximo: number; calificaciones: Record<string, number>; numero?: number; createdAt?: any; }
 
 export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo: string, grupo: any, onVolver: () => void }) {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
@@ -36,7 +37,14 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
 
       const snapE = await getDocs(collection(db, `groups/${idGrupo}/evidences`));
       const listaE: Evidencia[] = [];
-      snapE.forEach(d => listaE.push({ id: d.id, ...d.data() } as Evidencia));
+      
+      snapE.forEach(d => {
+        const data = d.data();
+        // MAGIA: Filtramos estrictamente para que los "Avisos" no entren al Kardex ni afecten promedios
+        if (data.tipo !== 'Aviso') {
+          listaE.push({ id: d.id, ...data } as Evidencia);
+        }
+      });
       
       listaE.sort((a, b) => {
         const comp = a.fechaActividad.localeCompare(b.fechaActividad);
@@ -47,6 +55,8 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
         }
         return comp;
       });
+      
+      // La numeración ahora solo aplicará a actividades reales
       const listaNumerada = listaE.map((ev, index) => ({ ...ev, numero: index + 1, trimestre: ev.trimestre || '1' }));
       setEvidencias(listaNumerada);
       
@@ -56,7 +66,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
   }, [idGrupo]);
 
   const manejarBusqueda = (val: string) => {
-    // Evitamos caracteres extraños en la búsqueda básica
     const cleanVal = val.replace(/[^\w\sñÑáéíóúÁÉÍÓÚ]/gi, '');
     setBusquedaAlumno(cleanVal);
     const encontrado = alumnos.find(a => a.fullName.toLowerCase() === cleanVal.toLowerCase());
@@ -348,7 +357,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
           {/* --- VISTA POR ALUMNO (KARDEX) --- */}
           {modo === 'alumno' && (
             <div>
-              {/* MAGIA UX: Ocultamos el buscador si ya hay alumno seleccionado y ponemos botón de nueva búsqueda */}
               {!alumnoSeleccionado ? (
                 <div style={{ marginBottom: '1.5rem', position: 'relative', animation: 'fadeIn 0.3s' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Buscar Estudiante:</label>
@@ -369,7 +377,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
               ) : (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
                   
-                  {/* Tarjeta de Alumno Seleccionado con Botón Nueva Búsqueda */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '1.5rem', borderRadius: '16px', borderLeft: '4px solid var(--accent-blue)' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
