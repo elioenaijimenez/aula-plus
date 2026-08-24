@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { collection, query, getDocs, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 
@@ -23,9 +23,17 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
   const [ganador, setGanador] = useState<OpcionRuleta | null>(null);
   const [historialGanadores, setHistorialGanadores] = useState<OpcionRuleta[]>([]);
 
+  // MAGIA SEGURIDAD: Obtenemos el email para filtrar
   useEffect(() => {
     const fetchGrupos = async () => {
-      const q = query(collection(db, 'groups'));
+      const sessionLocal = localStorage.getItem('aulaPlusSession');
+      const sessionData = sessionLocal ? JSON.parse(sessionLocal) : null;
+      const userEmail = sessionData?.user?.email || sessionData?.email || '';
+
+      if (!userEmail) return;
+
+      // FILTRO ESTRICTO: Solo grupos del maestro actual
+      const q = query(collection(db, 'groups'), where('docenteEmail', '==', userEmail));
       const snap = await getDocs(q);
       const lista: Grupo[] = [];
       snap.forEach(d => lista.push({ id: d.id, name: d.data().name, subject: d.data().subject }));
@@ -122,29 +130,30 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
   }
 
   return (
-    <div className="fullscreen-bg">
+    <div className="fullscreen-bg" style={{ animation: 'fadeIn 0.3s' }}>
       
-      <div style={{ flexShrink: 0, display: 'flex', gap: '1rem', padding: '1rem 2rem', width: '100%', backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', alignItems: 'center', flexWrap: 'wrap', zIndex: 100 }}>
-        <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'var(--bg-input)', color: 'white', border: '1px solid var(--border-color)' }}>← Salir</button>
+      {/* HEADER MEJORADO UX */}
+      <div style={{ flexShrink: 0, display: 'flex', gap: '1rem', padding: '1.5rem', width: '100%', backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', alignItems: 'center', flexWrap: 'wrap', zIndex: 100, borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px', marginBottom: '1rem' }}>
+        <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>← Salir</button>
         
         <TutorialTooltip mensaje="Alterna entre cargar la lista de un grupo oficial, o escribir tus propios textos para rifar temas o actividades." posicion="bottom">
           <div style={{ display: 'flex', backgroundColor: 'var(--bg-input)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-            <button onClick={() => handleCambiarModo('grupo')} style={{ padding: '0.5rem 1rem', border: 'none', background: modo === 'grupo' ? 'var(--accent-blue)' : 'transparent', color: modo === 'grupo' ? 'white' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 'bold' }}>Mis Grupos</button>
-            <button onClick={() => handleCambiarModo('custom')} style={{ padding: '0.5rem 1rem', border: 'none', background: modo === 'custom' ? 'var(--accent-purple)' : 'transparent', color: modo === 'custom' ? 'white' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 'bold' }}>Personalizada</button>
+            <button onClick={() => handleCambiarModo('grupo')} style={{ padding: '0.6rem 1.2rem', border: 'none', background: modo === 'grupo' ? 'var(--accent-yellow)' : 'transparent', color: modo === 'grupo' ? '#000' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s' }}>Mis Grupos</button>
+            <button onClick={() => handleCambiarModo('custom')} style={{ padding: '0.6rem 1.2rem', border: 'none', background: modo === 'custom' ? 'var(--accent-yellow)' : 'transparent', color: modo === 'custom' ? '#000' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s' }}>Personalizada</button>
           </div>
         </TutorialTooltip>
 
         {modo === 'grupo' && (
-          <select className="search-input" value={grupoSeleccionado} onChange={e => setGrupoSeleccionado(e.target.value)} style={{ width: '100%', maxWidth: '300px' }}>
-            <option value="">Selecciona un Grupo</option>
+          <select className="search-input" value={grupoSeleccionado} onChange={e => setGrupoSeleccionado(e.target.value)} style={{ width: '100%', maxWidth: '300px', margin: 0, border: '2px solid var(--accent-yellow)', backgroundColor: 'var(--bg-input)', fontWeight: 'bold' }}>
+            <option value="">-- Selecciona un Grupo --</option>
             {grupos.map(g => <option key={g.id} value={g.id}>{g.name} - {g.subject}</option>)}
           </select>
         )}
 
         {opciones.length > 0 && (
           <TutorialTooltip mensaje="Si está activo, el alumno o elemento seleccionado desaparecerá de la ruleta para no repetir ganadores." posicion="bottom">
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-input)', padding: '0.5rem 1rem', borderRadius: '50px', fontSize: '0.9rem', border: '1px solid var(--border-color)' }}>
-              <input type="checkbox" checked={removerGanador} onChange={e => setRemoverGanador(e.target.checked)} /> Remover al ganar
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-input)', padding: '0.6rem 1rem', borderRadius: '50px', fontSize: '0.9rem', border: '1px solid var(--border-color)', fontWeight: 'bold', color: 'var(--text-main)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={removerGanador} onChange={e => setRemoverGanador(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> Remover al ganar
             </label>
           </TutorialTooltip>
         )}
@@ -153,28 +162,28 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
       {cargando ? <div className="loader" style={{marginTop: '5rem'}}></div> : (
         <div className="ruleta-grid-layout">
           
-          <div className="ruleta-lista-area">
+          <div className="ruleta-lista-area" style={{ backgroundColor: 'var(--bg-panel)', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
             {modo === 'custom' && (
               <div style={{ marginBottom: '1.5rem', width: '100%' }}>
-                <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--accent-purple)', fontSize: '1rem' }}>Escribe opciones (Una por línea)</h3>
+                <h3 style={{ margin: '0 0 0.8rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>📝 Opciones Personalizadas</h3>
                 <textarea 
                   className="search-input" 
                   value={textoCustom} 
                   onChange={e => setTextoCustom(e.target.value)}
-                  placeholder="Ej.&#10;Exponer Tema 1&#10;Revisar Tarea&#10;Dinámica de grupo"
-                  style={{ minHeight: '150px', resize: 'vertical', marginBottom: '0.8rem', fontSize: '0.9rem', width: '100%' }}
+                  placeholder="Escribe una opción por línea...&#10;Ejemplo:&#10;Exponer Tema 1&#10;Revisar Tarea&#10;Dinámica de grupo"
+                  style={{ minHeight: '150px', resize: 'vertical', marginBottom: '0.8rem', fontSize: '1rem', width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)' }}
                 />
-                <button onClick={aplicarListaCustom} className="pill-btn" style={{ width: '100%', backgroundColor: 'var(--accent-purple)', color: 'white' }}>Agregar a la ruleta</button>
+                <button onClick={aplicarListaCustom} className="pill-btn" style={{ width: '100%', backgroundColor: 'var(--accent-yellow)', color: '#000', fontWeight: 'bold' }}>Agregar a la ruleta</button>
               </div>
             )}
 
-            <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)', fontSize: '1.1rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem' }}>📝 Lista de Ganadores</h3>
+            <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)', fontSize: '1.2rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem' }}>🏆 Historial de Ganadores</h3>
             {historialGanadores.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Aún no hay seleccionados.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>Aún no hay seleccionados.</p>
             ) : (
-              <ol style={{ paddingLeft: '1.2rem', margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <ol style={{ paddingLeft: '1.2rem', margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                 {historialGanadores.map((ganadorHist, i) => (
-                  <li key={i} style={{ backgroundColor: 'var(--bg-input)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontWeight: 'bold', wordBreak: 'break-word' }}>
+                  <li key={i} style={{ backgroundColor: 'var(--bg-input)', padding: '0.6rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontWeight: 'bold', wordBreak: 'break-word' }}>
                     {ganadorHist.texto}
                   </li>
                 ))}
@@ -191,13 +200,13 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '0 1rem', minHeight: '60px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '0 1rem', minHeight: '80px', marginBottom: '1rem' }}>
               {ganador ? (
-                <h1 className="shake" style={{ fontSize: 'clamp(1.2rem, 3vw, 1.8rem)', margin: 0, color: 'var(--text-main)', textShadow: '0 4px 10px rgba(0,0,0,0.5)', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.2', textAlign: 'center' }}>
+                <h1 className="shake" style={{ fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', margin: 0, color: 'var(--accent-yellow)', textShadow: '0 4px 10px rgba(0,0,0,0.5)', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.2', textAlign: 'center' }}>
                   🎉 ¡{ganador.texto}! 🎉
                 </h1>
               ) : (
-                <h2 style={{ color: 'var(--text-muted)', textAlign: 'center', fontSize: 'clamp(1rem, 4vw, 1.2rem)', margin: 0 }}>
+                <h2 style={{ color: 'var(--text-muted)', textAlign: 'center', fontSize: 'clamp(1.2rem, 3vw, 1.5rem)', margin: 0 }}>
                   {modo === 'grupo' ? '👆 Selecciona un grupo arriba' : '👆 Ingresa opciones en el panel'}
                 </h2>
               )}
@@ -205,18 +214,18 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
 
             {opciones.length > 0 && (
               <div style={{ position: 'relative', zIndex: 5, width: '100%', display: 'flex', justifyContent: 'center' }}>
-                <div className="ruleta-flecha"></div>
+                <div className="ruleta-flecha" style={{ borderTopColor: 'var(--text-main)', top: '-15px' }}></div>
                 <div 
                   className="ruleta-container" 
-                  style={{ background: `conic-gradient(${conicGradientString})`, transform: `rotate(${rotacion}deg)`, transitionDuration: '4s' }}
+                  style={{ background: `conic-gradient(${conicGradientString})`, transform: `rotate(${rotacion}deg)`, transitionDuration: '4s', border: '8px solid var(--bg-panel)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}
                 >
                   {opciones.map((op, i) => {
                     const rot = (360 / opciones.length) * i + (360 / opciones.length) / 2;
-                    const size = opciones.length > 40 ? '9px' : opciones.length > 25 ? '11px' : '14px';
+                    const size = opciones.length > 40 ? '10px' : opciones.length > 25 ? '12px' : '15px';
 
                     return (
                       <div key={op.id} style={{ position: 'absolute', top: '50%', left: '50%', width: '50%', transformOrigin: '0 0', transform: `rotate(${rot}deg)` }}>
-                        <div style={{ position: 'absolute', left: '35px', top: '0', transform: 'translateY(-50%)', color: '#FFFFFF', fontWeight: '700', fontSize: size, whiteSpace: 'nowrap', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+                        <div style={{ position: 'absolute', left: '40px', top: '0', transform: 'translateY(-50%)', color: '#FFFFFF', fontWeight: '800', fontSize: size, whiteSpace: 'nowrap', textShadow: '1px 1px 3px rgba(0,0,0,0.8)' }}>
                           {op.texto.length > 25 ? op.texto.substring(0, 25) + '...' : op.texto}
                         </div>
                       </div>
@@ -231,12 +240,12 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
             <button 
               onClick={girarRuleta} 
               disabled={girando || opciones.length === 0} 
-              className="pill-btn" 
+              className="pill-btn hover-opacity" 
               style={{ 
-                backgroundColor: 'var(--accent-blue)', color: 'white', fontSize: '1.2rem', padding: '1.5rem 3rem', boxShadow: '0 8px 0 #1036B5', transform: girando ? 'translateY(8px)' : 'none', transition: 'all 0.1s', border: 'none', letterSpacing: '1px', width: '100%', maxWidth: '300px'
+                backgroundColor: 'var(--accent-yellow)', color: '#000', fontSize: '1.4rem', padding: '1.5rem 3rem', boxShadow: '0 8px 0 #b28000', transform: girando ? 'translateY(8px)' : 'none', transition: 'all 0.1s', border: 'none', letterSpacing: '1px', width: '100%', maxWidth: '350px', fontWeight: '900'
               }}
             >
-              {girando ? 'GIRANDO...' : 'GIRAR RULETA'}
+              {girando ? 'GIRANDO...' : '🎡 GIRAR RULETA'}
             </button>
           </div>
 

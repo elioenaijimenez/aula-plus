@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import TutorialTooltip from './TutorialTooltip';
+
+
+type ModoTemporizador = 'bomba' | 'zen' | 'carrera';
 
 export default function UtilidadTemporizador({ onVolver }: { onVolver: () => void }) {
   const [horas, setHoras] = useState(0);
@@ -10,31 +12,62 @@ export default function UtilidadTemporizador({ onVolver }: { onVolver: () => voi
   const [tiempoTotal, setTiempoTotal] = useState(0);
   const [corriendo, setCorriendo] = useState(false);
   const [terminado, setTerminado] = useState(false);
+  
+  const [modo, setModo] = useState<ModoTemporizador>('bomba');
   const [conSonido, setConSonido] = useState(true);
   const [errorValidacion, setErrorValidacion] = useState('');
 
+  // SÍNTESIS DE SONIDOS DINÁMICOS SEGÚN EL MODO
   const reproducirTic = () => {
-    if (!conSonido) return;
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(400, ctx.currentTime);
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(); osc.stop(ctx.currentTime + 0.05);
+    if (!conSonido || modo === 'zen') return; // El modo zen no tiene tic-tac para no estresar
+    
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      if (modo === 'bomba') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, ctx.currentTime);
+        gain.gain.setValueAtTime(0.05, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      } else if (modo === 'carrera') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        gain.gain.setValueAtTime(0.03, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+      }
+
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.1);
+    } catch (e) { console.error("Audio block"); }
   };
 
   const reproducirAlarma = () => {
     if (!conSonido) return;
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 1);
-    osc.connect(ctx.destination);
-    osc.start(); osc.stop(ctx.currentTime + 1);
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      if (modo === 'zen') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.frequency.setValueAtTime(554.37, ctx.currentTime + 0.5); // Acorde suave
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 2);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 2);
+      } else {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 1.5);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 1.5);
+      }
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -52,18 +85,17 @@ export default function UtilidadTemporizador({ onVolver }: { onVolver: () => voi
     return () => clearInterval(intervalo);
   }, [corriendo, tiempoRestante]);
 
+  const aplicarPreset = (m: number) => {
+    setHoras(0); setMinutos(m); setSegundos(0);
+    setErrorValidacion('');
+  };
+
   const iniciar = () => {
     setErrorValidacion('');
-    let totalSegundos = (horas * 3600) + (minutos * 60) + segundos;
+    const totalSegundos = (horas * 3600) + (minutos * 60) + segundos;
     
-    if (totalSegundos === 0) {
-      setErrorValidacion('Error: El tiempo configurado no puede ser cero.');
-      return;
-    }
-    if (totalSegundos > 10800) {
-      setErrorValidacion('Error: El tiempo máximo permitido es de 3 horas.');
-      return;
-    }
+    if (totalSegundos === 0) { setErrorValidacion('¡Ups! El tiempo no puede ser cero.'); return; }
+    if (totalSegundos > 10800) { setErrorValidacion('Límite excedido. El máximo es de 3 horas.'); return; }
     
     setTiempoTotal(totalSegundos);
     setTiempoRestante(totalSegundos);
@@ -72,11 +104,12 @@ export default function UtilidadTemporizador({ onVolver }: { onVolver: () => voi
   };
 
   const pausar = () => setCorriendo(false);
+  const reanudar = () => setCorriendo(true);
   
   const reiniciar = () => {
     setCorriendo(false);
     setTerminado(false);
-    setTiempoRestante(0);
+    setTiempoRestante(tiempoTotal);
   };
 
   const modificarTiempo = (cantidadSegundos: number) => {
@@ -84,10 +117,7 @@ export default function UtilidadTemporizador({ onVolver }: { onVolver: () => voi
       let nuevoTiempo = prev + cantidadSegundos;
       if (nuevoTiempo < 0) nuevoTiempo = 0;
       if (nuevoTiempo > 10800) nuevoTiempo = 10800; 
-      
-      if (nuevoTiempo > tiempoTotal) {
-        setTiempoTotal(nuevoTiempo);
-      }
+      if (nuevoTiempo > tiempoTotal) setTiempoTotal(nuevoTiempo); // Ajusta la barra si se pasa del total original
       return nuevoTiempo;
     });
   };
@@ -102,94 +132,157 @@ export default function UtilidadTemporizador({ onVolver }: { onVolver: () => voi
 
   const porcentaje = tiempoTotal > 0 ? (tiempoRestante / tiempoTotal) * 100 : 100;
   
-  let colorActual = 'var(--accent-green)';
-  let emojiActual = '🟢😎';
-  if (porcentaje <= 50) { colorActual = 'var(--accent-yellow)'; emojiActual = '🟡😬'; }
-  if (tiempoRestante <= 10 && tiempoRestante > 0) { colorActual = 'var(--accent-red)'; emojiActual = '🔴⏳'; }
-  if (terminado) { colorActual = 'var(--accent-red)'; emojiActual = '💥💥'; }
+  // COLORES DINÁMICOS BASADOS EN EL MODO
+  let colorPrimario = 'var(--accent-blue)';
+  let colorPeligro = 'var(--accent-red)';
+  let colorAdvertencia = 'var(--accent-yellow)';
+  let emojiModo = '⏱️';
+
+  if (modo === 'bomba') { colorPrimario = '#E53935'; colorAdvertencia = '#FB8C00'; emojiModo = '💣'; }
+  if (modo === 'zen') { colorPrimario = '#4CAF50'; colorAdvertencia = '#8BC34A'; colorPeligro = '#FFB300'; emojiModo = '🧘'; }
+  if (modo === 'carrera') { colorPrimario = '#9C27B0'; colorAdvertencia = '#E040FB'; colorPeligro = '#FF5252'; emojiModo = '🏁'; }
+
+  let colorActual = colorPrimario;
+  let emojiEstado = emojiModo;
+  if (porcentaje <= 30) { colorActual = colorAdvertencia; emojiEstado = modo === 'zen' ? '🔔' : '⚠️'; }
+  if (tiempoRestante <= 10 && tiempoRestante > 0) { colorActual = colorPeligro; emojiEstado = modo === 'zen' ? '⏳' : '🔥'; }
+  if (terminado) { colorActual = colorPeligro; emojiEstado = '💥'; }
 
   return (
-    <div className="fullscreen-bg">
+    <div className="fullscreen-bg" style={{ animation: 'fadeIn 0.3s' }}>
       
       {/* VISTA DE CONFIGURACIÓN */}
       {!corriendo && !terminado && tiempoRestante === 0 && (
-        <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2rem', borderRadius: '24px', textAlign: 'center', border: '1px solid var(--border-color)', animation: 'fadeIn 0.3s', maxWidth: '90%', width: '400px' }}>
-          <h2 style={{ margin: '0 0 1.5rem 0', color: 'var(--accent-red)' }}>⏱️ Temporizador Bomba</h2>
-          
-          <TutorialTooltip mensaje="El temporizador permite un máximo de 3 horas (10,800 segundos)." posicion="top">
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <label style={{ color: 'var(--text-muted)' }}>Hrs</label>
-                <input type="number" value={horas} onChange={e => setHoras(Math.min(3, Math.max(0, Number(e.target.value))))} className="score-input" style={{ fontSize: '1.5rem', width: '70px' }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <label style={{ color: 'var(--text-muted)' }}>Min</label>
-                <input type="number" value={minutos} onChange={e => setMinutos(Math.min(59, Math.max(0, Number(e.target.value))))} className="score-input" style={{ fontSize: '1.5rem', width: '70px' }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <label style={{ color: 'var(--text-muted)' }}>Seg</label>
-                <input type="number" value={segundos} onChange={e => setSegundos(Math.min(59, Math.max(0, Number(e.target.value))))} className="score-input" style={{ fontSize: '1.5rem', width: '70px' }} />
-              </div>
-            </div>
-          </TutorialTooltip>
-          
-          {errorValidacion && (
-            <div style={{ backgroundColor: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', padding: '0.8rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem', fontWeight: 'bold' }}>
-              {errorValidacion}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexDirection: 'column' }}>
-            <button onClick={iniciar} className="pill-btn" style={{ backgroundColor: 'var(--accent-red)', color: 'white', padding: '1rem', fontSize: '1.2rem', width: '100%' }}>▶ Iniciar Tiempo</button>
-            <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancelar y Salir</button>
+        <div style={{ backgroundColor: 'var(--bg-panel)', padding: '2.5rem', borderRadius: '30px', border: '1px solid var(--border-color)', animation: 'fadeIn 0.4s', maxWidth: '600px', width: '90%', boxShadow: '0 10px 40px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <h2 style={{ margin: 0, color: 'var(--text-main)', fontSize: '2rem' }}>⏳ Ajustar Temporizador</h2>
+            <button onClick={onVolver} style={{ background: 'var(--bg-input)', border: 'none', padding: '0.5rem 1rem', borderRadius: '50px', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: 'bold' }}>✕ Salir</button>
           </div>
+          
+          {/* SELECCIÓN DE MODO (TEMÁTICA) */}
+          <div style={{ marginBottom: '2rem' }}>
+            <label style={{ display: 'block', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.8rem' }}>1. Selecciona el Modo de Juego</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.8rem' }}>
+              <div onClick={() => setModo('bomba')} style={{ backgroundColor: modo === 'bomba' ? 'rgba(229, 57, 53, 0.1)' : 'var(--bg-input)', border: `2px solid ${modo === 'bomba' ? '#E53935' : 'transparent'}`, padding: '1rem', borderRadius: '16px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>💣</span>
+                <span style={{ fontWeight: 'bold', color: modo === 'bomba' ? '#E53935' : 'var(--text-main)' }}>Bomba</span>
+              </div>
+              <div onClick={() => setModo('zen')} style={{ backgroundColor: modo === 'zen' ? 'rgba(76, 175, 80, 0.1)' : 'var(--bg-input)', border: `2px solid ${modo === 'zen' ? '#4CAF50' : 'transparent'}`, padding: '1rem', borderRadius: '16px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>🧘</span>
+                <span style={{ fontWeight: 'bold', color: modo === 'zen' ? '#4CAF50' : 'var(--text-main)' }}>Examen</span>
+              </div>
+              <div onClick={() => setModo('carrera')} style={{ backgroundColor: modo === 'carrera' ? 'rgba(156, 39, 176, 0.1)' : 'var(--bg-input)', border: `2px solid ${modo === 'carrera' ? '#9C27B0' : 'transparent'}`, padding: '1rem', borderRadius: '16px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>🏁</span>
+                <span style={{ fontWeight: 'bold', color: modo === 'carrera' ? '#9C27B0' : 'var(--text-main)' }}>Carrera</span>
+              </div>
+            </div>
+          </div>
+
+          <label style={{ display: 'block', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.8rem' }}>2. Configura el Tiempo</label>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+            {[1, 3, 5, 10, 15, 25].map(m => (
+              <button key={m} onClick={() => aplicarPreset(m)} style={{ flex: 1, padding: '0.6rem', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)', fontWeight: 'bold', cursor: 'pointer' }}>{m}m</button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '2rem', backgroundColor: 'var(--bg-app)', padding: '1.5rem', borderRadius: '20px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 'bold' }}>Horas</label>
+              <input type="number" value={horas} onChange={e => setHoras(Math.min(3, Math.max(0, Number(e.target.value))))} style={{ fontSize: '2.5rem', width: '80px', textAlign: 'center', backgroundColor: 'transparent', border: 'none', borderBottom: '3px solid var(--text-muted)', color: 'var(--text-main)', fontWeight: 'bold', outline: 'none' }} />
+            </div>
+            <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--text-muted)', marginTop: '1rem' }}>:</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 'bold' }}>Minutos</label>
+              <input type="number" value={minutos} onChange={e => setMinutos(Math.min(59, Math.max(0, Number(e.target.value))))} style={{ fontSize: '2.5rem', width: '80px', textAlign: 'center', backgroundColor: 'transparent', border: 'none', borderBottom: `3px solid ${colorPrimario}`, color: 'var(--text-main)', fontWeight: 'bold', outline: 'none' }} />
+            </div>
+            <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--text-muted)', marginTop: '1rem' }}>:</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 'bold' }}>Segundos</label>
+              <input type="number" value={segundos} onChange={e => setSegundos(Math.min(59, Math.max(0, Number(e.target.value))))} style={{ fontSize: '2.5rem', width: '80px', textAlign: 'center', backgroundColor: 'transparent', border: 'none', borderBottom: '3px solid var(--text-muted)', color: 'var(--text-main)', fontWeight: 'bold', outline: 'none' }} />
+            </div>
+          </div>
+          
+          {errorValidacion && <div style={{ backgroundColor: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', padding: '0.8rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem', fontWeight: 'bold', textAlign: 'center' }}>{errorValidacion}</div>}
+
+          <button onClick={iniciar} className="pill-btn hover-opacity" style={{ backgroundColor: colorPrimario, color: 'white', padding: '1.2rem', fontSize: '1.4rem', width: '100%', fontWeight: '900', letterSpacing: '1px', boxShadow: `0 8px 0 ${colorPrimario}80` }}>
+            ▶ INICIAR TEMPORIZADOR
+          </button>
         </div>
       )}
 
-      {/* VISTA DEL CRONÓMETRO CORRIENDO */}
+      {/* VISTA DEL CRONÓMETRO CORRIENDO (PANTALLA COMPLETA) */}
       {(corriendo || tiempoRestante > 0 || terminado) && (
-        <div className="timer-layout">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: 'var(--bg-app)', padding: '2rem', boxSizing: 'border-box' }}>
           
-          <button className="timer-side-btn" onClick={() => modificarTiempo(-10)} style={{ display: window.innerWidth > 900 ? 'flex' : 'none' }} title="Penalizar (-10s)">-10s</button>
-          
-          <div className="timer-main">
-            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '1rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '3rem' }}>{emojiActual}</span>
-              <TutorialTooltip mensaje="El temporizador emite un sonido de 'bomba' y una alarma aguda al finalizar." posicion="right">
-                <button onClick={() => setConSonido(!conSonido)} style={{ background: 'none', border: 'none', fontSize: '2.5rem', cursor: 'pointer' }}>
-                  {conSonido ? '🔊' : '🔇'}
-                </button>
-              </TutorialTooltip>
+          {/* CABECERA Y SONIDO */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '1000px', marginBottom: '2rem' }}>
+            <div style={{ backgroundColor: 'var(--bg-panel)', padding: '0.5rem 1rem', borderRadius: '50px', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border-color)' }}>
+              <span style={{ fontSize: '1.5rem' }}>{emojiEstado}</span>
+              <span style={{ fontWeight: 'bold', color: 'var(--text-main)', textTransform: 'uppercase' }}>Modo {modo}</span>
             </div>
+            <button onClick={() => setConSonido(!conSonido)} style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '50px', padding: '0.5rem 1rem', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {conSonido ? '🔊 Sonido ON' : '🔇 Muteado'}
+            </button>
+          </div>
 
-            <div style={{ width: '100%', height: '20px', backgroundColor: 'var(--bg-input)', borderRadius: '10px', overflow: 'hidden', marginBottom: '2rem' }}>
-              <div style={{ width: `${porcentaje}%`, height: '100%', backgroundColor: colorActual, transition: 'width 1s linear, background-color 0.5s ease' }}></div>
-            </div>
-
-            <div className={`timer-display ${terminado ? 'shake' : ''}`} style={{ color: colorActual, width: '100%' }}>
+          {/* RELOJ GIGANTE */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', flex: 1 }}>
+            <div className={terminado || (tiempoRestante <= 10 && tiempoRestante > 0) ? 'pulse-fast' : ''} style={{ 
+              fontSize: 'clamp(5rem, 20vw, 15rem)', 
+              fontWeight: 900, 
+              color: colorActual, 
+              lineHeight: 1, 
+              fontFamily: 'monospace', 
+              textShadow: `0 0 40px ${colorActual}60`,
+              transition: 'color 0.5s ease',
+              fontVariantNumeric: 'tabular-nums'
+            }}>
               {terminado ? "00:00" : formatoTiempo(tiempoRestante)}
             </div>
 
-            {terminado && <h1 className="shake" style={{ fontSize: 'clamp(2rem, 8vw, 4rem)', color: 'var(--accent-red)', margin: '1rem 0 3rem 0', textAlign: 'center' }}>¡TERMINÓ EL TIEMPO!</h1>}
-
-            <div className="timer-sides-mobile" style={{ display: window.innerWidth <= 900 ? 'flex' : 'none' }}>
-              <button className="timer-side-btn" onClick={() => modificarTiempo(-10)} title="Penalizar (-10s)">-10s</button>
-              <button className="timer-side-btn" onClick={() => modificarTiempo(10)} title="Bonificar (+10s)">+10s</button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-              {corriendo ? (
-                <button onClick={pausar} className="pill-btn" style={{ backgroundColor: 'var(--accent-yellow)', color: '#000', fontSize: '1.2rem', padding: '1rem 2rem', flex: 1, minWidth: '150px' }}>⏸ Pausar</button>
-              ) : (
-                !terminado && <button onClick={() => setCorriendo(true)} className="pill-btn" style={{ backgroundColor: 'var(--accent-green)', color: '#000', fontSize: '1.2rem', padding: '1rem 2rem', flex: 1, minWidth: '150px' }}>▶ Reanudar</button>
-              )}
-              <button onClick={reiniciar} className="pill-btn" style={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontSize: '1.2rem', padding: '1rem 2rem', flex: 1, minWidth: '150px' }}>⏹ Reiniciar</button>
-              <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)', flex: 1, minWidth: '150px' }}>Salir</button>
-            </div>
+            {terminado && <h1 className="shake" style={{ fontSize: 'clamp(2rem, 5vw, 4rem)', color: colorPeligro, margin: '2rem 0 0 0', textTransform: 'uppercase', letterSpacing: '2px' }}>¡TIEMPO AGOTADO!</h1>}
           </div>
 
-          <button className="timer-side-btn" onClick={() => modificarTiempo(10)} style={{ display: window.innerWidth > 900 ? 'flex' : 'none' }} title="Bonificar (+10s)">+10s</button>
+          {/* BARRA DE PROGRESO INFERIOR */}
+          <div style={{ width: '100%', maxWidth: '1000px', height: '30px', backgroundColor: 'var(--bg-input)', borderRadius: '15px', overflow: 'hidden', margin: '3rem 0', border: '1px solid var(--border-color)', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.1)' }}>
+            <div style={{ width: `${porcentaje}%`, height: '100%', backgroundColor: colorActual, transition: 'width 1s linear, background-color 0.5s ease', boxShadow: `0 0 20px ${colorActual}` }}></div>
+          </div>
 
+          {/* CONTROLES DEL MAESTRO */}
+          <div style={{ width: '100%', maxWidth: '1000px', display: 'flex', flexDirection: 'column', gap: '1.5rem', backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
+            
+            {/* Comodines (Gamificación) */}
+            {!terminado && (
+              <div>
+                <p style={{ margin: '0 0 0.8rem 0', color: 'var(--text-muted)', fontWeight: 'bold', fontSize: '0.9rem', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '1px' }}>Comodines del Maestro</p>
+                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={() => modificarTiempo(60)} className="pill-btn" style={{ backgroundColor: 'rgba(46, 229, 92, 0.1)', border: '2px solid var(--accent-green)', color: 'var(--accent-green)', fontWeight: 'bold', flex: 1, minWidth: '120px' }}>⭐ +1 Minuto</button>
+                  <button onClick={() => modificarTiempo(30)} className="pill-btn" style={{ backgroundColor: 'rgba(28, 81, 255, 0.1)', border: '2px solid var(--accent-blue)', color: 'var(--accent-blue)', fontWeight: 'bold', flex: 1, minWidth: '120px' }}>✨ +30 Seg</button>
+                  <button onClick={() => modificarTiempo(-30)} className="pill-btn" style={{ backgroundColor: 'rgba(255, 77, 79, 0.1)', border: '2px dashed var(--accent-red)', color: 'var(--accent-red)', fontWeight: 'bold', flex: 1, minWidth: '120px' }}>⚡ -30 Seg (Penalizar)</button>
+                </div>
+              </div>
+            )}
+
+            {/* Controles Base */}
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              {corriendo ? (
+                <button onClick={pausar} className="pill-btn" style={{ backgroundColor: 'var(--text-main)', color: 'var(--bg-app)', fontSize: '1.1rem', padding: '1rem 2rem', flex: 1, minWidth: '150px', fontWeight: 'bold' }}>⏸ Congelar Tiempo</button>
+              ) : (
+                !terminado && <button onClick={reanudar} className="pill-btn" style={{ backgroundColor: colorActual, color: 'white', fontSize: '1.1rem', padding: '1rem 2rem', flex: 1, minWidth: '150px', fontWeight: 'bold' }}>▶ Reanudar</button>
+              )}
+              <button onClick={reiniciar} className="pill-btn" style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontSize: '1.1rem', padding: '1rem 2rem', flex: 1, minWidth: '150px', fontWeight: 'bold' }}>⏹ Reiniciar Reloj</button>
+              <button onClick={() => { reiniciar(); setTiempoRestante(0); }} className="pill-btn" style={{ backgroundColor: 'transparent', border: '1px solid var(--text-muted)', color: 'var(--text-muted)', fontSize: '1.1rem', padding: '1rem 2rem', flex: 1, minWidth: '150px', fontWeight: 'bold' }}>⚙️ Ajustes</button>
+            </div>
+          </div>
+          
+          <style>{`
+            .pulse-fast { animation: pulse 1s infinite; }
+            @keyframes pulse {
+              0% { transform: scale(1); }
+              50% { transform: scale(1.02); }
+              100% { transform: scale(1); }
+            }
+          `}</style>
         </div>
       )}
     </div>
