@@ -20,7 +20,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<Alumno | null>(null);
 
   useEffect(() => {
-    // Extraer correo de sesión
     const sessionLocal = localStorage.getItem('aulaPlusSession');
     if (sessionLocal) {
       const sessionData = JSON.parse(sessionLocal);
@@ -57,12 +56,18 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
   }, [idGrupo]);
 
   const manejarBusqueda = (val: string) => {
-    setBusquedaAlumno(val);
-    const encontrado = alumnos.find(a => a.fullName.toLowerCase() === val.toLowerCase());
+    // Evitamos caracteres extraños en la búsqueda básica
+    const cleanVal = val.replace(/[^\w\sñÑáéíóúÁÉÍÓÚ]/gi, '');
+    setBusquedaAlumno(cleanVal);
+    const encontrado = alumnos.find(a => a.fullName.toLowerCase() === cleanVal.toLowerCase());
     setAlumnoSeleccionado(encontrado || null);
   };
 
-  // Función genérica para obtener el perfil desde la nube
+  const limpiarBusqueda = () => {
+    setAlumnoSeleccionado(null);
+    setBusquedaAlumno('');
+  };
+
   const obtenerPerfilNube = async () => {
     if (!userEmail) return { nombre: 'Docente', escuela: 'Escuela no registrada', ubicacion: 'Ubicación no registrada' };
     try {
@@ -106,7 +111,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
   const exportarKardexWord = async () => {
     if (!alumnoSeleccionado) return;
     
-    // EXTRACCIÓN DE LA NUBE
     const perfilNube = await obtenerPerfilNube();
     const nombreDocente = perfilNube.nombre || 'Docente';
     const escuela = perfilNube.escuela || 'Escuela no registrada';
@@ -177,14 +181,13 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
     const blob = new Blob(['\uFEFF' + htmlContent], { type: 'application/msword;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `Kardex_${alumnoSeleccionado.fullName}.doc`);
+    link.setAttribute('download', `Kardex_${alumnoSeleccionado.fullName.replace(/[^a-zA-Z0-9]/g, '_')}.doc`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const exportarKardexPDF = async () => {
     if (!alumnoSeleccionado) return;
     
-    // EXTRACCIÓN DE LA NUBE
     const perfilNube = await obtenerPerfilNube();
     const nombreDocente = perfilNube.nombre || 'Docente';
     const escuela = perfilNube.escuela || 'Escuela no registrada';
@@ -193,7 +196,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
 
     const doc = new jsPDF();
 
-    // Encabezado
     doc.setFontSize(16);
     doc.setTextColor(28, 81, 255);
     doc.text(escuela, 105, 15, { align: 'center' });
@@ -207,7 +209,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
     doc.setDrawColor(200, 200, 200);
     doc.line(14, 30, 196, 30);
 
-    // Datos del alumno
     doc.setFontSize(12);
     doc.setTextColor(0, 0, 0);
     doc.text("Kardex de Avance Académico", 14, 38);
@@ -251,7 +252,6 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
       }
     });
 
-    // Mensaje Pedagógico
     let finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFontSize(11);
     if (pendientes > 0) {
@@ -270,7 +270,7 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
       doc.text(`este periodo. Sigue así y alcanzarás todas tus metas.`, 14, finalY + 11);
     }
 
-    doc.save(`Kardex_${alumnoSeleccionado.fullName}.pdf`);
+    doc.save(`Kardex_${alumnoSeleccionado.fullName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
   };
 
   if (cargando) return <div className="loader" style={{ marginTop: '4rem' }}></div>;
@@ -348,31 +348,37 @@ export default function ReporteAcademico({ idGrupo, grupo, onVolver }: { idGrupo
           {/* --- VISTA POR ALUMNO (KARDEX) --- */}
           {modo === 'alumno' && (
             <div>
-              <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Buscar Estudiante:</label>
-                <input 
-                  type="text" 
-                  list="lista-alumnos" 
-                  className="search-input" 
-                  placeholder="Escribe el apellido o nombre..." 
-                  value={busquedaAlumno}
-                  onChange={e => manejarBusqueda(e.target.value)}
-                  style={{ border: '1px solid var(--accent-blue)', fontSize: '1.1rem' }}
-                />
-                <datalist id="lista-alumnos">
-                  {alumnos.map(a => <option key={a.id} value={a.fullName} />)}
-                </datalist>
-              </div>
-
+              {/* MAGIA UX: Ocultamos el buscador si ya hay alumno seleccionado y ponemos botón de nueva búsqueda */}
               {!alumnoSeleccionado ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Selecciona un alumno para generar su Kardex.</div>
+                <div style={{ marginBottom: '1.5rem', position: 'relative', animation: 'fadeIn 0.3s' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Buscar Estudiante:</label>
+                  <input 
+                    type="text" 
+                    list="lista-alumnos" 
+                    className="search-input" 
+                    placeholder="Escribe el apellido o nombre..." 
+                    value={busquedaAlumno}
+                    onChange={e => manejarBusqueda(e.target.value)}
+                    style={{ border: '2px solid var(--accent-blue)', fontSize: '1.1rem', padding: '1rem', borderRadius: '12px' }}
+                  />
+                  <datalist id="lista-alumnos">
+                    {alumnos.map(a => <option key={a.id} value={a.fullName} />)}
+                  </datalist>
+                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Selecciona un alumno para generar su Kardex.</div>
+                </div>
               ) : (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
                   
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '1.5rem', borderRadius: '16px' }}>
+                  {/* Tarjeta de Alumno Seleccionado con Botón Nueva Búsqueda */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '1.5rem', borderRadius: '16px', borderLeft: '4px solid var(--accent-blue)' }}>
                     <div>
-                      <h4 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>{alumnoSeleccionado.fullName}</h4>
-                      <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)' }}>No. Lista: {alumnoSeleccionado.studentNumber}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--text-main)' }}>{alumnoSeleccionado.fullName}</h4>
+                        <button onClick={limpiarBusqueda} className="pill-btn" style={{ background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none', padding: '0.3rem 0.8rem', fontSize: '0.85rem' }}>
+                          ✕ Nueva Búsqueda
+                        </button>
+                      </div>
+                      <p style={{ margin: '0', color: 'var(--text-muted)' }}>No. Lista: {alumnoSeleccionado.studentNumber}</p>
                     </div>
                     
                     <TutorialTooltip mensaje="Genera un reporte motivacional listo para imprimir o enviar a los tutores.">

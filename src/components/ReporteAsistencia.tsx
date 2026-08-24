@@ -48,7 +48,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Estados para el mini calendario y gestión de días
   const [mesCalGlobal, setMesCalGlobal] = useState(new Date());
   const [modalDiaActivo, setModalDiaActivo] = useState<string | null>(null);
   const [editandoAsistencia, setEditandoAsistencia] = useState(false);
@@ -129,10 +128,16 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
   }, [idGrupo, refreshTrigger]);
 
   const manejarBusqueda = (val: string) => {
-    setBusquedaAlumno(val);
-    const encontrado = statsGenerales.find(a => a.fullName.toLowerCase() === val.toLowerCase());
+    const cleanVal = val.replace(/[^\w\sñÑáéíóúÁÉÍÓÚ]/gi, '');
+    setBusquedaAlumno(cleanVal);
+    const encontrado = statsGenerales.find(a => a.fullName.toLowerCase() === cleanVal.toLowerCase());
     setAlumnoSeleccionado(encontrado || null);
     setFiltroActivo('TODOS');
+  };
+
+  const limpiarBusqueda = () => {
+    setAlumnoSeleccionado(null);
+    setBusquedaAlumno('');
   };
 
   const alternarFiltro = (tipo: 'P'|'R'|'F'|'J') => setFiltroActivo(prev => prev === tipo ? 'TODOS' : tipo);
@@ -205,7 +210,7 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
     `;
 
     const blob = new Blob(['\uFEFF' + htmlContent], { type: 'application/msword;charset=utf-8;' });
-    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', `ReporteAsistencia_${alumnoSeleccionado.fullName}.doc`);
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', `ReporteAsistencia_${alumnoSeleccionado.fullName.replace(/[^a-zA-Z0-9]/g, '_')}.doc`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
 
     if (tipoExportacion === 'citatorio') {
@@ -290,7 +295,7 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
     docRef.text("Nombre y Firma de Enterado (Padre / Tutor)", 105, finalY + 6, { align: 'center' });
     docRef.setFontSize(9); docRef.setTextColor(100, 100, 100); docRef.text("Fecha de firma: ____ / ____________ / ______", 105, finalY + 12, { align: 'center' });
 
-    docRef.save(`ReporteAsistencia_${alumnoSeleccionado.fullName}.pdf`);
+    docRef.save(`ReporteAsistencia_${alumnoSeleccionado.fullName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
 
     if (tipoExportacion === 'citatorio') {
       const fechaHoy = obtenerFechaLocal();
@@ -300,7 +305,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
     setModalExportar(false);
   };
 
-  // Lógica del mini calendario y edición
   const diasRegistradosSet = new Set(diasRegistrados.map(d => d.fecha));
   
   const abrirDiaRegistrado = (fechaStr: string) => {
@@ -413,12 +417,27 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
       <div style={{ backgroundColor: 'var(--bg-app)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)', flex: 1, minWidth: '300px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h4 style={{ margin: 0, color: 'var(--text-main)' }}>Historial por Día</h4>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={() => setMesCalGlobal(new Date(añoCal, mesCal - 1, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>◀</button>
-            <span style={{ fontWeight: 'bold' }}>{MESES[mesCal]} {añoCal}</span>
-            <button onClick={() => setMesCalGlobal(new Date(añoCal, mesCal + 1, 1))} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>▶</button>
+          
+          {/* MEJORA UX: Botones con contraste alto para que las flechas se distingan perfectamente */}
+          <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+            <button 
+              onClick={() => setMesCalGlobal(new Date(añoCal, mesCal - 1, 1))} 
+              style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-main)', fontWeight: 'bold' }}
+              title="Mes Anterior"
+            >
+              ◀
+            </button>
+            <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{MESES[mesCal]} {añoCal}</span>
+            <button 
+              onClick={() => setMesCalGlobal(new Date(añoCal, mesCal + 1, 1))} 
+              style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-main)', fontWeight: 'bold' }}
+              title="Mes Siguiente"
+            >
+              ▶
+            </button>
           </div>
         </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', fontSize: '0.85rem' }}>
           {DIAS_SEMANA.map(dia => <div key={dia} style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{dia}</div>)}
           {celdas}
@@ -437,7 +456,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
   return (
     <div style={{ backgroundColor: 'var(--bg-panel)', padding: '1.5rem', borderRadius: '24px', border: '1px solid var(--border-color)', animation: 'fadeIn 0.3s' }}>
       
-      {/* MODAL GLOBAL: GESTIÓN DE DÍA ESPECÍFICO */}
       {modalDiaActivo && (
         <div className="modal-overlay" style={{ zIndex: 1100 }}>
           <div className="modal-content" style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -454,7 +472,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
                <button onClick={borrarAsistenciaDia} disabled={procesandoDia} className="pill-btn" style={{ flex: 1, backgroundColor: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: '1px solid var(--accent-red)' }}>🗑 Borrar Día</button>
             </div>
 
-            {/* Lista de Alumnos para ver/editar */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {alumnosBase.map(alumno => (
                 <div key={alumno.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem', backgroundColor: 'var(--bg-input)', borderRadius: '8px', borderLeft: `4px solid ${asistenciaTemporal[alumno.id] === 'P' ? 'var(--accent-green)' : asistenciaTemporal[alumno.id] === 'R' ? 'var(--accent-yellow)' : asistenciaTemporal[alumno.id] === 'J' ? 'var(--accent-blue)' : 'var(--accent-red)'}` }}>
@@ -485,7 +502,6 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
         </div>
       )}
 
-      {/* MODAL CITATORIO/HISTORIAL */}
       {modalExportar && alumnoSeleccionado && (
         <div className="modal-overlay" style={{ zIndex: 1000 }}>
           <div className="modal-content" style={{ maxWidth: '500px' }}>
@@ -583,24 +599,33 @@ export default function ReporteAsistencia({ idGrupo, grupo, onVolver }: { idGrup
 
           {modo === 'alumno' && (
             <div>
-              <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Buscar historial de un estudiante específico:</label>
-                <input 
-                  type="text" list="lista-alumnos-asist" className="search-input" placeholder="Escribe el apellido o nombre..." 
-                  value={busquedaAlumno} onChange={e => manejarBusqueda(e.target.value)}
-                  style={{ border: '1px solid var(--accent-green)', fontSize: '1.1rem' }}
-                />
-                <datalist id="lista-alumnos-asist">
-                  {statsGenerales.map(a => <option key={a.id} value={a.fullName} />)}
-                </datalist>
-              </div>
-
-              {alumnoSeleccionado && (
+              {/* MAGIA UX: Ocultamos el buscador si ya hay alumno seleccionado */}
+              {!alumnoSeleccionado ? (
+                <div style={{ marginBottom: '1.5rem', position: 'relative', animation: 'fadeIn 0.3s' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Buscar historial de un estudiante específico:</label>
+                  <input 
+                    type="text" list="lista-alumnos-asist" className="search-input" placeholder="Escribe el apellido o nombre..." 
+                    value={busquedaAlumno} onChange={e => manejarBusqueda(e.target.value)}
+                    style={{ border: '2px solid var(--accent-green)', fontSize: '1.1rem', padding: '1rem', borderRadius: '12px' }}
+                  />
+                  <datalist id="lista-alumnos-asist">
+                    {statsGenerales.map(a => <option key={a.id} value={a.fullName} />)}
+                  </datalist>
+                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Selecciona un alumno para revisar su asistencia detallada.</div>
+                </div>
+              ) : (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '1.5rem', borderRadius: '16px' }}>
+                  
+                  {/* Tarjeta de Alumno Seleccionado con Botón Nueva Búsqueda */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', backgroundColor: 'var(--bg-input)', padding: '1.5rem', borderRadius: '16px', borderLeft: '4px solid var(--accent-green)' }}>
                     <div>
-                      <h4 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-main)' }}>{alumnoSeleccionado.fullName}</h4>
-                      <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)' }}>Asistencia Real: <strong style={{ color: alumnoSeleccionado.porcentaje >= 85 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{alumnoSeleccionado.porcentaje.toFixed(1)}%</strong></p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--text-main)' }}>{alumnoSeleccionado.fullName}</h4>
+                        <button onClick={limpiarBusqueda} className="pill-btn" style={{ background: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none', padding: '0.3rem 0.8rem', fontSize: '0.85rem' }}>
+                          ✕ Nueva Búsqueda
+                        </button>
+                      </div>
+                      <p style={{ margin: '0', color: 'var(--text-muted)' }}>Asistencia Real: <strong style={{ color: alumnoSeleccionado.porcentaje >= 85 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{alumnoSeleccionado.porcentaje.toFixed(1)}%</strong></p>
                       {alumnoSeleccionado.lastCitationDate && (
                         <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: 'var(--accent-green)' }}>✅ Último reporte generado el: {formatearFecha(alumnoSeleccionado.lastCitationDate)}</p>
                       )}
