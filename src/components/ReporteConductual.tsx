@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy, addDoc, serverTimestamp, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, addDoc, serverTimestamp, onSnapshot, doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 import jsPDF from 'jspdf';
@@ -17,7 +17,6 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
 
   const [vista, setVista] = useState<'panel' | 'formulario'>('panel');
   
-  // MAGIA UX: Buscador inteligente en lugar de select simple
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<Alumno | null>(null);
 
@@ -63,7 +62,6 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
   }, [idGrupo]);
 
   const manejarBusqueda = (val: string) => {
-    // Evitamos caracteres extraños
     const cleanVal = val.replace(/[^\w\sñÑáéíóúÁÉÍÓÚ]/gi, '');
     setBusquedaAlumno(cleanVal);
     const encontrado = alumnos.find(a => a.fullName.toLowerCase() === cleanVal.toLowerCase());
@@ -98,6 +96,17 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
       setVista('panel');
     } catch (error) { alert("Error al guardar la incidencia."); }
     setGuardando(false);
+  };
+
+  // NUEVA FUNCIÓN: Eliminar Incidencia
+  const eliminarIncidencia = async (idIncidencia: string, folio: string) => {
+    if (window.confirm(`¿Estás seguro de que deseas ELIMINAR permanentemente el registro con folio ${folio}?\nEsta acción no se puede deshacer.`)) {
+      try {
+        await deleteDoc(doc(db, `groups/${idGrupo}/incidences`, idIncidencia));
+      } catch (error) {
+        alert("Error al intentar eliminar la incidencia.");
+      }
+    }
   };
 
   const formatearFecha = (fechaISO: string) => {
@@ -452,18 +461,20 @@ export default function ReporteConductual({ idGrupo, grupo, onVolver, setGuiaCon
               <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                    <span style={{ backgroundColor: '#f0f0f0', padding: '0.2rem 0.6rem', borderRadius: '5px', fontSize: '0.75rem', fontFamily: 'monospace', border: '1px solid #ddd' }}>Folio: {inc.folio}</span>
-                    <span style={{ color: 'var(--accent-yellow)', fontSize: '0.85rem', fontWeight: 'bold' }}>{formatearFecha(inc.fecha)}</span>
+                    {/* MEJORA UX: Colores forzados oscuros para asegurar legibilidad sobre la libreta blanca */}
+                    <span style={{ backgroundColor: '#e2e8f0', color: '#333', padding: '0.2rem 0.6rem', borderRadius: '5px', fontSize: '0.75rem', fontFamily: 'monospace', border: '1px solid #cbd5e1' }}>Folio: {inc.folio}</span>
+                    <span style={{ color: '#d97706', fontSize: '0.85rem', fontWeight: 'bold' }}>{formatearFecha(inc.fecha)}</span>
                   </div>
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem', color: '#222' }}>{inc.nombreAlumno}</h4>
-                  <span style={{ color: 'var(--text-main)', fontSize: '0.85rem', backgroundColor: '#fff', padding: '0.3rem 0.8rem', borderRadius: '50px', border: '1px solid #ccc' }}>{inc.tipo}</span>
+                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem', color: '#1e293b' }}>{inc.nombreAlumno}</h4>
+                  <span style={{ color: '#0f172a', fontSize: '0.85rem', backgroundColor: '#f1f5f9', padding: '0.3rem 0.8rem', borderRadius: '50px', border: '1px solid #cbd5e1', fontWeight: '500' }}>{inc.tipo}</span>
                 </div>
                 
-                <TutorialTooltip mensaje="Descarga el acta lista para imprimir y solicitar la firma de Trabajo Social o Padres de familia." posicion="left">
+                <TutorialTooltip mensaje="Descarga o elimina el acta de incidencia." posicion="left">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Descargar:</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#64748b' }}>Acciones:</span>
                     <button onClick={() => exportarBitacoraWord(inc)} className="pill-btn" style={{ backgroundColor: '#185ABD', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '8px' }} title="Descargar en Word">📄 .doc</button>
                     <button onClick={() => exportarBitacoraPDF(inc)} className="pill-btn" style={{ backgroundColor: '#E53935', color: 'white', padding: '0.4rem 0.8rem', border: 'none', borderRadius: '8px' }} title="Descargar en PDF">📕 .pdf</button>
+                    <button onClick={() => eliminarIncidencia(inc.id, inc.folio)} className="pill-btn" style={{ backgroundColor: 'transparent', color: '#ef4444', padding: '0.4rem 0.8rem', border: '1px solid #ef4444', borderRadius: '8px' }} title="Eliminar Incidencia">🗑️</button>
                   </div>
                 </TutorialTooltip>
               </div>
