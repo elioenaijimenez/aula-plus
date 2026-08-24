@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, getDocs, doc, getDoc, where, addDoc, updateDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc, where, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import TutorialTooltip from './TutorialTooltip';
 
@@ -16,18 +16,15 @@ export default function ChatIA() {
   const [memoria, setMemoria] = useState<MemoriaEscolar>({ escuela: 'Escuela Secundaria', ubicacion: 'México', docente: 'Docente', revisor: 'Dirección' });
   const [contextoDUA, setContextoDUA] = useState<ContextoAula | null>(null);
   
-  // Estados de control
   const [tieneGrupos, setTieneGrupos] = useState<boolean | null>(null);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [objetivo, setObjetivo] = useState('');
   const [escribiendo, setEscribiendo] = useState(false);
   
-  // Estados de Historial en la nube
   const [historial, setHistorial] = useState<ChatGuardado[]>([]);
   const [chatActivoId, setChatActivoId] = useState<string | null>(null);
   const [menuHistorialAbierto, setMenuHistorialAbierto] = useState(false);
 
-  // Referencia para el Auto-Scroll
   const mensajesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -38,14 +35,29 @@ export default function ChatIA() {
     scrollToBottom();
   }, [mensajes, escribiendo]);
 
+  // SOLUCIÓN AL BUG DE FIREBASE: Ordenamiento local para evitar el error de Índice Compuesto
   const cargarHistorialNube = async (email: string) => {
     try {
-      const qHistorial = query(collection(db, 'teacher_chats'), where('docenteEmail', '==', email), orderBy('updatedAt', 'desc'), limit(15));
+      const qHistorial = query(collection(db, 'teacher_chats'), where('docenteEmail', '==', email));
       const snapHistorial = await getDocs(qHistorial);
       const listaHistorial: ChatGuardado[] = [];
-      snapHistorial.forEach(d => listaHistorial.push({ id: d.id, ...d.data() } as ChatGuardado));
-      setHistorial(listaHistorial);
-    } catch (e) { console.error("Error al cargar historial", e); }
+      
+      snapHistorial.forEach(d => {
+        listaHistorial.push({ id: d.id, ...d.data() } as ChatGuardado);
+      });
+
+      // Ordenamos localmente por fecha (los más recientes primero)
+      listaHistorial.sort((a, b) => {
+        const timeA = a.updatedAt?.seconds || 0;
+        const timeB = b.updatedAt?.seconds || 0;
+        return timeB - timeA;
+      });
+
+      // Limitamos a los últimos 15 chats para no saturar la vista
+      setHistorial(listaHistorial.slice(0, 15));
+    } catch (e) { 
+      console.error("Error al cargar historial", e); 
+    }
   };
 
   useEffect(() => {
@@ -56,7 +68,6 @@ export default function ChatIA() {
       let nombre = sessionData?.user?.nombre || '';
       setUserEmail(email);
 
-      // 1. Validar que el maestro tenga grupos
       let resumenGrupos = '';
       try {
         const qGrupos = query(collection(db, 'groups'), where('docenteEmail', '==', email));
@@ -78,7 +89,6 @@ export default function ChatIA() {
         console.error("Error al leer grupos:", e);
       }
 
-      // 2. Cargar perfil, memoria escolar y CONTEXTO VIVO (DUA)
       let datosMemoria: MemoriaEscolar = { escuela: 'Escuela Secundaria', ubicacion: 'México', docente: nombre || 'Docente', revisor: 'Dirección' };
       let datosContextoAula: ContextoAula | null = null;
 
@@ -101,7 +111,6 @@ export default function ChatIA() {
       const primerNombre = nombre ? nombre.split(' ')[0] : 'Docente';
       setDocenteNombre(nombre || 'Docente');
 
-      // 3. Crear directiva maestra (Inyección silenciosa del DUA)
       const directiva = `
 [CONTEXTO DEL USUARIO]:
 - Nombre del Docente: ${nombre || 'Profesor/a'}
@@ -124,10 +133,7 @@ ${datosContextoAula ? `
       `.trim();
       setContextoDocente(directiva);
 
-      // 4. Iniciar chat vacío
       iniciarNuevaConversacion(nombre);
-
-      // 5. Cargar historial
       cargarHistorialNube(email);
     };
 
@@ -149,6 +155,22 @@ ${datosContextoAula ? `
     setMenuHistorialAbierto(false);
   };
 
+  // NUEVO: Eliminar chats antiguos
+  const eliminarChat = async (idChat: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm("¿Seguro que deseas eliminar esta conversación permanentemente?")) {
+      try {
+        await deleteDoc(doc(db, 'teacher_chats', idChat));
+        setHistorial(prev => prev.filter(c => c.id !== idChat));
+        if (chatActivoId === idChat) {
+          iniciarNuevaConversacion();
+        }
+      } catch (error) {
+        alert("Error al intentar eliminar el chat.");
+      }
+    }
+  };
+
   const enviarMensaje = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!objetivo.trim()) return;
@@ -161,7 +183,6 @@ ${datosContextoAula ? `
 
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      // Solo enviamos el contexto completo en el primer mensaje de la IA para ahorrar tokens
       const promptCompleto = nuevosMensajes.length <= 2 
         ? `${contextoDocente}\n\n[CONSULTA DEL DOCENTE]:\n${textoUsuario}`
         : textoUsuario;
@@ -181,7 +202,6 @@ ${datosContextoAula ? `
       const mensajesFinales: Mensaje[] = [...nuevosMensajes, { rol: 'ia', texto: textoIA }];
       setMensajes(mensajesFinales);
 
-      // GUARDADO EN FIREBASE
       if (!chatActivoId) {
         const nuevoDoc = await addDoc(collection(db, 'teacher_chats'), {
           docenteEmail: userEmail,
@@ -290,7 +310,7 @@ ${datosContextoAula ? `
       
       {/* MENÚ LATERAL DE HISTORIAL */}
       {menuHistorialAbierto && (
-        <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '300px', backgroundColor: 'var(--bg-panel)', zIndex: 10, borderRight: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.2s', boxShadow: '4px 0 15px rgba(0,0,0,0.05)' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '100%', maxWidth: '350px', backgroundColor: 'var(--bg-panel)', zIndex: 10, borderRight: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.2s', boxShadow: '4px 0 15px rgba(0,0,0,0.05)' }}>
           <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h4 style={{ margin: 0, color: 'var(--accent-blue)' }}>Tus Consultas</h4>
             <button onClick={() => setMenuHistorialAbierto(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--text-muted)' }}>✕</button>
@@ -298,7 +318,7 @@ ${datosContextoAula ? `
           <div style={{ padding: '1rem' }}>
             <button onClick={() => iniciarNuevaConversacion()} className="pill-btn" style={{ width: '100%', background: 'var(--accent-purple)', color: 'white', fontWeight: 'bold' }}>+ Nueva Conversación</button>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0 1rem 1rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0 1rem 1rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
             {historial.length === 0 ? (
               <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '2rem' }}>No hay chats recientes.</p>
             ) : (
@@ -306,11 +326,20 @@ ${datosContextoAula ? `
                 <div 
                   key={chat.id} 
                   onClick={() => cargarConversacionPrevia(chat)}
-                  style={{ padding: '0.8rem', backgroundColor: chatActivoId === chat.id ? 'rgba(28, 81, 255, 0.1)' : 'var(--bg-input)', borderRadius: '12px', cursor: 'pointer', border: `1px solid ${chatActivoId === chat.id ? 'var(--accent-blue)' : 'transparent'}`, transition: 'all 0.2s' }}
+                  style={{ padding: '0.8rem 1rem', backgroundColor: chatActivoId === chat.id ? 'rgba(28, 81, 255, 0.1)' : 'var(--bg-input)', borderRadius: '12px', cursor: 'pointer', border: `1px solid ${chatActivoId === chat.id ? 'var(--accent-blue)' : 'var(--border-color)'}`, transition: 'all 0.2s', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}
                 >
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: chatActivoId === chat.id ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: chatActivoId === chat.id ? 'var(--accent-blue)' : 'var(--text-main)', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                     💬 {chat.titulo}
                   </p>
+                  <button 
+                    onClick={(e) => eliminarChat(chat.id, e)} 
+                    style={{ background: 'transparent', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', fontSize: '1.1rem', padding: '0.2rem', opacity: 0.7 }}
+                    title="Eliminar Chat"
+                    onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
+                    onMouseOut={(e) => e.currentTarget.style.opacity = '0.7'}
+                  >
+                    🗑
+                  </button>
                 </div>
               ))
             )}
@@ -328,7 +357,6 @@ ${datosContextoAula ? `
             <span style={{ fontSize: '1.5rem' }}>🎓</span>
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>Asistente Aula+</div>
-              {/* MAGIA UX: Badge dinámico que muestra si la IA está leyendo el contexto o no */}
               <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: contextoDUA?.entorno ? 'var(--accent-purple)' : 'var(--text-muted)', backgroundColor: contextoDUA?.entorno ? 'rgba(156, 39, 176, 0.1)' : 'transparent', padding: '0.1rem 0.5rem', borderRadius: '50px', display: 'inline-block', marginTop: '0.2rem' }}>
                 {contextoDUA?.entorno ? '✨ IA Contextualizada (DUA Activo)' : '● Modo Genérico'}
               </div>
