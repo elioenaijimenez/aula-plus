@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-// CORRECCIÓN: Agregamos signOut a la importación
 import { signInWithPopup, onAuthStateChanged, setPersistence, browserLocalPersistence, signOut } from 'firebase/auth'; 
 import { db, auth, googleProvider } from '../services/firebase'; 
 import TutorialTooltip from './TutorialTooltip';
@@ -42,6 +41,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
 
         if (userEmail === 'eliojimenezm@gmail.com' || userEmail === 'blaneguapo@gmail.com') { 
            onLogin('admin', { nombre: user.displayName || 'Admin', email: userEmail, telefono: '', keyPlus: 'SUPER-ADMIN-MASTER' });
+           setCargando(false);
            return;
         }
 
@@ -65,24 +65,30 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
                 alert("⏳ Tu licencia KeyPlus ha expirado por tiempo.\nPor favor, contacta al Administrador para adquirir una nueva.");
                 setPaso(2);
                 setVerificandoSesion(false);
+                setCargando(false); // LIBERAMOS EL FORMULARIO
               } else {
                 onLogin('docente', { nombre: data.usuario, email: userEmail, telefono: data.telefono, keyPlus: data.codigo });
+                setCargando(false); // LIBERAMOS EL FORMULARIO
               }
             } else {
               alert("🛑 Acceso Denegado.\nTu licencia KeyPlus actual ha expirado o fue revocada por el Administrador. Ingresa una nueva licencia válida.");
               setPaso(2);
               setVerificandoSesion(false);
+              setCargando(false); // LIBERAMOS EL FORMULARIO
             }
           } else {
             setPaso(2);
             setVerificandoSesion(false);
+            setCargando(false); // LIBERAMOS EL FORMULARIO AQUÍ PARA LOS USUARIOS NUEVOS
           }
         } catch (error) {
           console.error("Error validando licencia:", error);
           setVerificandoSesion(false);
+          setCargando(false);
         }
       } else {
         setVerificandoSesion(false);
+        setCargando(false);
       }
     });
 
@@ -95,6 +101,7 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
     try {
       await setPersistence(auth, browserLocalPersistence);
       await signInWithPopup(auth, googleProvider);
+      // Nota: No apagamos 'cargando' aquí porque onAuthStateChanged tomará el control.
     } catch (error: any) {
       console.error("Error Popup:", error);
       setCargando(false);
@@ -106,7 +113,6 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
     }
   };
 
-  // NUEVO: Función para desconectar de Google y regresar al paso 1 si eres alumno por error
   const cancelarGoogle = async () => {
     setCargando(true);
     try {
@@ -228,7 +234,6 @@ export default function Login({ onLogin }: { onLogin: (role: 'docente' | 'admin'
               {cargando ? 'Validando Licencia...' : 'Activar e Ingresar'}
             </button>
             
-            {/* NUEVO BOTÓN: Por si el alumno se equivocó */}
             <button type="button" onClick={cancelarGoogle} disabled={cargando} className="pill-btn" style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)', marginTop: '0.5rem' }}>
               ← Cancelar y Volver
             </button>
