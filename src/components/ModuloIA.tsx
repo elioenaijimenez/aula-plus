@@ -3,6 +3,7 @@ import ChatIA from './ChatIA';
 import PlaneadorDidactico from './PlaneadorDidactico';
 import ContextoEscuela from './ContextoEscuela';
 import ContextoGrupo from './ContextoGrupo';
+import ProgramaAnalitico from './ProgramaAnalitico';
 
 type VistaActiva =
   | 'escuela'
@@ -18,7 +19,6 @@ interface PasoRuta {
   subtitulo: string;
   icono: string;
   color: string;
-  disponible: boolean;
 }
 
 const PASOS: PasoRuta[] = [
@@ -29,7 +29,6 @@ const PASOS: PasoRuta[] = [
     subtitulo: 'Realidad escolar y comunitaria',
     icono: '🏫',
     color: '#1C51FF',
-    disponible: true,
   },
   {
     id: 'grupo',
@@ -38,7 +37,6 @@ const PASOS: PasoRuta[] = [
     subtitulo: 'Diagnóstico y características',
     icono: '👥',
     color: '#22A447',
-    disponible: true,
   },
   {
     id: 'programa',
@@ -47,7 +45,6 @@ const PASOS: PasoRuta[] = [
     subtitulo: 'Contenidos, PDA y contextualización',
     icono: '📚',
     color: '#9C27B0',
-    disponible: true,
   },
   {
     id: 'planeacion',
@@ -56,7 +53,6 @@ const PASOS: PasoRuta[] = [
     subtitulo: 'Diseña la intervención didáctica',
     icono: '✨',
     color: '#F97316',
-    disponible: true,
   },
   {
     id: 'consultas',
@@ -65,7 +61,6 @@ const PASOS: PasoRuta[] = [
     subtitulo: 'Consulta y acompaña tu práctica',
     icono: '💬',
     color: '#607D8B',
-    disponible: true,
   },
 ];
 
@@ -200,9 +195,8 @@ export default function ModuloIA({
               }}
             >
               Construye una sola vez la información que Aula+ necesita para
-              conocer tu escuela y tus grupos. Después podrás convertir esas
-              decisiones en Programa Analítico, planeaciones y consultas
-              pedagógicas cada vez más personalizadas.
+              conocer tu escuela y tus grupos. Después conviértela en decisiones
+              curriculares, Programa Analítico y planeaciones personalizadas.
             </p>
           </div>
 
@@ -261,6 +255,7 @@ export default function ModuloIA({
                 >
                   {pasoActual.titulo}
                 </strong>
+
                 <span
                   style={{
                     color: 'var(--text-muted)',
@@ -310,12 +305,7 @@ export default function ModuloIA({
               >
                 <button
                   type="button"
-                  onClick={() => {
-                    if (paso.disponible) {
-                      setVistaActiva(paso.id);
-                    }
-                  }}
-                  disabled={!paso.disponible}
+                  onClick={() => setVistaActiva(paso.id)}
                   style={{
                     width: '100%',
                     minHeight: '78px',
@@ -326,12 +316,10 @@ export default function ModuloIA({
                     background: activo
                       ? `color-mix(in srgb, ${paso.color} 9%, var(--bg-input))`
                       : 'transparent',
-                    cursor: paso.disponible ? 'pointer' : 'not-allowed',
-                    opacity: paso.disponible ? 1 : 0.45,
+                    cursor: 'pointer',
                     padding: '.75rem',
                     textAlign: 'left',
                     transition: 'all .2s ease',
-                    position: 'relative',
                   }}
                   className="aula-ruta-btn"
                 >
@@ -411,7 +399,7 @@ export default function ModuloIA({
         </div>
       </section>
 
-      {/* CONTENIDO DEL PASO */}
+      {/* CONTENIDO */}
       <section
         style={{
           flex: 1,
@@ -422,11 +410,7 @@ export default function ModuloIA({
 
         {vistaActiva === 'grupo' && <ContextoGrupo />}
 
-        {vistaActiva === 'programa' && (
-          <ProgramaAnaliticoEnConstruccion
-            onIrAGrupo={() => setVistaActiva('grupo')}
-          />
-        )}
+        {vistaActiva === 'programa' && <ProgramaAnalitico />}
 
         {vistaActiva === 'planeacion' && (
           <div style={{ animation: 'fadeIn .25s ease' }}>
@@ -443,7 +427,7 @@ export default function ModuloIA({
       </section>
 
       <style>{`
-        .aula-ruta-btn:hover:not(:disabled) {
+        .aula-ruta-btn:hover {
           transform: translateY(-1px);
           background: var(--bg-input) !important;
         }
@@ -454,166 +438,6 @@ export default function ModuloIA({
           }
         }
       `}</style>
-    </div>
-  );
-}
-
-function ProgramaAnaliticoEnConstruccion({
-  onIrAGrupo,
-}: {
-  onIrAGrupo: () => void;
-}) {
-  return (
-    <div
-      style={{
-        maxWidth: '980px',
-        margin: '0 auto',
-        animation: 'fadeIn .3s ease',
-      }}
-    >
-      <section
-        style={{
-          borderRadius: '28px',
-          border: '1px solid var(--border-color)',
-          background:
-            'linear-gradient(135deg, rgba(156,39,176,.10), rgba(28,81,255,.07))',
-          padding: 'clamp(1.5rem, 4vw, 3rem)',
-          textAlign: 'center',
-          overflow: 'hidden',
-          position: 'relative',
-        }}
-      >
-        <div
-          style={{
-            width: '82px',
-            height: '82px',
-            margin: '0 auto 1rem',
-            display: 'grid',
-            placeItems: 'center',
-            borderRadius: '26px',
-            background: 'rgba(156,39,176,.10)',
-            fontSize: '2.3rem',
-          }}
-        >
-          📚
-        </div>
-
-        <span
-          style={{
-            display: 'inline-block',
-            color: 'var(--accent-purple)',
-            fontWeight: 900,
-            fontSize: '.72rem',
-            letterSpacing: '.08em',
-            marginBottom: '.45rem',
-          }}
-        >
-          PRÓXIMO MÓDULO
-        </span>
-
-        <h2
-          style={{
-            margin: 0,
-            color: 'var(--text-main)',
-            fontSize: 'clamp(1.6rem, 3vw, 2.3rem)',
-            letterSpacing: '-.035em',
-          }}
-        >
-          Programa Analítico del grupo
-        </h2>
-
-        <p
-          style={{
-            maxWidth: '690px',
-            margin: '.8rem auto 0',
-            color: 'var(--text-muted)',
-            lineHeight: 1.65,
-            fontSize: '.92rem',
-          }}
-        >
-          Aquí conectaremos el contexto de la escuela y del grupo con los
-          contenidos y PDA del Programa Sintético. Podrás capturar varios PDA
-          por contenido, contextualizarlos con IA, organizar su temporalidad y
-          distinguir claramente los referentes nacionales de cualquier
-          contenido local codiseñado.
-        </p>
-
-        <div
-          style={{
-            maxWidth: '720px',
-            margin: '1.5rem auto 0',
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: '.7rem',
-            textAlign: 'left',
-          }}
-        >
-          {[
-            ['📘', 'Contenido oficial', 'Se conservará literalmente.'],
-            ['🧩', 'Múltiples PDA', 'Uno, dos o todos los que correspondan.'],
-            ['🌎', 'Contextualización', 'Relacionada con la realidad guardada.'],
-            ['✨', 'Asistencia IA', 'Sugiere; el docente valida.'],
-          ].map(([icono, titulo, texto]) => (
-            <div
-              key={titulo}
-              style={{
-                padding: '1rem',
-                borderRadius: '17px',
-                border: '1px solid var(--border-color)',
-                background: 'var(--bg-panel)',
-              }}
-            >
-              <span
-                style={{
-                  fontSize: '1.25rem',
-                  display: 'block',
-                  marginBottom: '.4rem',
-                }}
-              >
-                {icono}
-              </span>
-              <strong
-                style={{
-                  display: 'block',
-                  color: 'var(--text-main)',
-                  fontSize: '.84rem',
-                }}
-              >
-                {titulo}
-              </strong>
-              <span
-                style={{
-                  display: 'block',
-                  color: 'var(--text-muted)',
-                  fontSize: '.72rem',
-                  marginTop: '.2rem',
-                  lineHeight: 1.4,
-                }}
-              >
-                {texto}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          onClick={onIrAGrupo}
-          style={{
-            marginTop: '1.5rem',
-            border: '1px solid var(--border-color)',
-            borderRadius: '14px',
-            background: 'var(--bg-panel)',
-            color: 'var(--text-main)',
-            padding: '.78rem 1rem',
-            cursor: 'pointer',
-            fontWeight: 800,
-          }}
-        >
-          ← Revisar primero el contexto del grupo
-        </button>
-      </section>
     </div>
   );
 }
@@ -666,9 +490,10 @@ function AvisoTransicionPlaneador() {
             lineHeight: 1.5,
           }}
         >
-          Todavía conserva su funcionamiento anterior. En una siguiente fase lo
-          conectaremos obligatoriamente con el grupo activo, su contexto y su
-          Programa Analítico para eliminar la planeación genérica.
+          El Programa Analítico ya está conectado. El siguiente cambio será
+          transformar este Planeador para que obligatoriamente utilice el grupo
+          activo, su contexto y los Contenidos/PDA guardados, eliminando el
+          contexto genérico.
         </p>
       </div>
     </div>
