@@ -36,6 +36,10 @@ import {
   obtenerCorreoSesion,
 } from '../services/planeacionContextService';
 
+import {
+  generarTextoIA,
+} from '../services/aiService';
+
 interface Mensaje {
   rol: 'user' | 'ia';
   texto: string;
@@ -789,16 +793,6 @@ ${JSON.stringify(
     setMensajeSistema('');
 
     try {
-      const apiKey =
-        import.meta.env
-          .VITE_GEMINI_API_KEY;
-
-      if (!apiKey) {
-        throw new Error(
-          'No existe VITE_GEMINI_API_KEY.'
-        );
-      }
-
       const contexto =
         construirContexto();
 
@@ -822,46 +816,11 @@ ${textoUsuario}
 Responde directamente a la consulta actual. Mantén continuidad con el historial cuando sea relevante y prioriza la información real del grupo activo.
 `.trim();
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text:
-                      promptCompleto,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.3,
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Gemini respondió ${response.status}`
-        );
-      }
-
-      const data =
-        await response.json();
-
       const textoIA =
-        data?.candidates?.[0]
-          ?.content?.parts?.[0]
-          ?.text ||
-        '⚠️ No fue posible recuperar una respuesta completa.';
+        await generarTextoIA({
+          prompt: promptCompleto,
+          temperature: 0.3,
+        });
 
       const mensajesFinales: Mensaje[] =
         [

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { generarTextoIA } from '../services/aiService';
 import type {
   ContextoEscuela,
   ContextoEscuelaCampos,
@@ -252,37 +253,10 @@ Devuelve exactamente esta estructura:
 `.trim();
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-      if (!apiKey) {
-        throw new Error('No existe VITE_GEMINI_API_KEY.');
-      }
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Gemini respondió ${response.status}`);
-      }
-
-      const data = await response.json();
-      const texto =
-        data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!texto) {
-        throw new Error('La IA no devolvió contenido.');
-      }
+      const texto = await generarTextoIA({
+  prompt,
+  temperature: 0.2,
+});
 
       const resultado = extraerJSON(texto);
 

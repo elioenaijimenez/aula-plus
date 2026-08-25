@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { generarTextoIA } from '../services/aiService';
 import type { CSSProperties, FormEvent, ReactNode } from 'react';
 import {
   collection,
@@ -764,51 +765,10 @@ La planeación debe poder ejecutarse de verdad. Prefiere calidad y coherencia so
 `.trim();
 
     try {
-      const apiKey =
-        import.meta.env.VITE_GEMINI_API_KEY;
-
-      if (!apiKey) {
-        throw new Error(
-          'No existe VITE_GEMINI_API_KEY.'
-        );
-      }
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [{ text: promptMaestro }],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.25,
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Gemini respondió ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      const texto =
-        data?.candidates?.[0]?.content?.parts?.[0]
-          ?.text;
-
-      if (!texto) {
-        throw new Error(
-          'La IA no devolvió contenido.'
-        );
-      }
+      const texto = await generarTextoIA({
+  prompt: promptMaestro,
+  temperature: 0.25,
+});
 
       setResultadoIA(texto);
     } catch (error) {
