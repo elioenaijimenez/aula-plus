@@ -195,8 +195,8 @@ export default function ModuloIA({
               }}
             >
               Construye una sola vez la información que Aula+ necesita para
-              conocer tu escuela y tus grupos. Después conviértela en decisiones
-              curriculares, Programa Analítico y planeaciones personalizadas.
+              conocer tu escuela y tus grupos. Después úsala para organizar el
+              Programa Analítico y generar planeaciones realmente personalizadas.
             </p>
           </div>
 
@@ -399,6 +399,94 @@ export default function ModuloIA({
         </div>
       </section>
 
+      {/* GUÍA DE PROGRESO */}
+      <section
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '.65rem',
+        }}
+      >
+        {[
+          {
+            icono: '🏫',
+            titulo: '1. Nutre Escuela',
+            texto: 'Registra la realidad escolar y comunitaria común.',
+            color: '#1C51FF',
+          },
+          {
+            icono: '👥',
+            titulo: '2. Conoce el Grupo',
+            texto: 'Guarda diagnóstico, fortalezas, ritmo, intereses y apoyos.',
+            color: '#22A447',
+          },
+          {
+            icono: '📚',
+            titulo: '3. Organiza Currículo',
+            texto: 'Captura Contenidos, PDA, contextualización y temporalidad.',
+            color: '#9C27B0',
+          },
+          {
+            icono: '✨',
+            titulo: '4. Planea',
+            texto: 'Elige grupo, referente curricular, periodo e intención.',
+            color: '#F97316',
+          },
+        ].map((item) => (
+          <div
+            key={item.titulo}
+            style={{
+              padding: '.8rem',
+              borderRadius: '17px',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-panel)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '.65rem',
+            }}
+          >
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: '12px',
+                background: `color-mix(in srgb, ${item.color} 10%, transparent)`,
+                fontSize: '1rem',
+              }}
+            >
+              {item.icono}
+            </div>
+
+            <div>
+              <strong
+                style={{
+                  display: 'block',
+                  color: 'var(--text-main)',
+                  fontSize: '.75rem',
+                  marginBottom: '.16rem',
+                }}
+              >
+                {item.titulo}
+              </strong>
+
+              <span
+                style={{
+                  display: 'block',
+                  color: 'var(--text-muted)',
+                  fontSize: '.67rem',
+                  lineHeight: 1.4,
+                }}
+              >
+                {item.texto}
+              </span>
+            </div>
+          </div>
+        ))}
+      </section>
+
       {/* CONTENIDO */}
       <section
         style={{
@@ -414,7 +502,6 @@ export default function ModuloIA({
 
         {vistaActiva === 'planeacion' && (
           <div style={{ animation: 'fadeIn .25s ease' }}>
-            <AvisoTransicionPlaneador />
             <PlaneadorDidactico />
           </div>
         )}
@@ -438,64 +525,6 @@ export default function ModuloIA({
           }
         }
       `}</style>
-    </div>
-  );
-}
-
-function AvisoTransicionPlaneador() {
-  return (
-    <div
-      style={{
-        marginBottom: '1rem',
-        padding: '1rem 1.1rem',
-        borderRadius: '18px',
-        border: '1px solid rgba(249,115,22,.18)',
-        background: 'rgba(249,115,22,.07)',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '.8rem',
-      }}
-    >
-      <div
-        style={{
-          width: '38px',
-          height: '38px',
-          flexShrink: 0,
-          display: 'grid',
-          placeItems: 'center',
-          borderRadius: '12px',
-          background: 'rgba(249,115,22,.10)',
-        }}
-      >
-        🛠️
-      </div>
-
-      <div>
-        <strong
-          style={{
-            display: 'block',
-            color: 'var(--text-main)',
-            fontSize: '.84rem',
-            marginBottom: '.2rem',
-          }}
-        >
-          Planeador actual en transición
-        </strong>
-
-        <p
-          style={{
-            margin: 0,
-            color: 'var(--text-muted)',
-            fontSize: '.76rem',
-            lineHeight: 1.5,
-          }}
-        >
-          El Programa Analítico ya está conectado. El siguiente cambio será
-          transformar este Planeador para que obligatoriamente utilice el grupo
-          activo, su contexto y los Contenidos/PDA guardados, eliminando el
-          contexto genérico.
-        </p>
-      </div>
     </div>
   );
 }
