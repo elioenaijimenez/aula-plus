@@ -75,7 +75,6 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
     setGrupoSeleccionado('');
   };
 
-  // NUEVA LÓGICA ERGONÓMICA PARA AGREGAR OPCIONES CUSTOM
   const agregarOpcionCustom = (e: React.FormEvent) => {
     e.preventDefault();
     const txt = textoCustom.trim();
@@ -145,7 +144,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
   return (
     <div className="fullscreen-bg" style={{ animation: 'fadeIn 0.3s' }}>
       
-      {/* HEADER */}
+      {/* HEADER COMPACTO Y MODERNO */}
       <div style={{ flexShrink: 0, display: 'flex', gap: '1rem', padding: '1.5rem', width: '100%', backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', alignItems: 'center', flexWrap: 'wrap', zIndex: 100, borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px', marginBottom: '1rem' }}>
         <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>← Salir</button>
         
@@ -164,7 +163,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
         )}
 
         {opciones.length > 0 && (
-          <TutorialTooltip mensaje="Si está activo, el alumno o elemento seleccionado desaparecerá de la ruleta para no repetir ganadores." posicion="bottom">
+          <TutorialTooltip mensaje="Si está activo, el elemento seleccionado desaparecerá de la ruleta para no repetir ganadores." posicion="bottom">
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-input)', padding: '0.6rem 1rem', borderRadius: '50px', fontSize: '0.9rem', border: '1px solid var(--border-color)', fontWeight: 'bold', color: 'var(--text-main)', cursor: 'pointer' }}>
               <input type="checkbox" checked={removerGanador} onChange={e => setRemoverGanador(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> Remover al ganar
             </label>
@@ -175,29 +174,31 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
       {cargando ? <div className="loader" style={{marginTop: '5rem'}}></div> : (
         <div className="ruleta-grid-layout">
           
-          <div className="ruleta-lista-area" style={{ backgroundColor: 'var(--bg-panel)', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
+          {/* PANEL LATERAL DIVIDIDO (MAGIA UX) */}
+          <div className="ruleta-lista-area" style={{ display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-panel)', borderRadius: '24px', border: '1px solid var(--border-color)', overflow: 'hidden', height: '100%', maxHeight: '75vh' }}>
             
-            {/* PANEL CUSTOM ERGONÓMICO */}
+            {/* ZONA 1: OPCIONES (Solo aparece en modo custom y usa hasta el 55% de la altura) */}
             {modo === 'custom' && (
-              <div style={{ marginBottom: '1.5rem', width: '100%' }}>
-                <h3 style={{ margin: '0 0 0.8rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>📝 Elementos de la Ruleta</h3>
+              <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', maxHeight: '55%', borderBottom: '2px solid var(--border-color)' }}>
+                <h3 style={{ margin: '0 0 0.8rem 0', color: 'var(--accent-yellow)', fontSize: '1.1rem', flexShrink: 0 }}>📝 Elementos de la Ruleta</h3>
                 
-                <form onSubmit={agregarOpcionCustom} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                <form onSubmit={agregarOpcionCustom} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexShrink: 0 }}>
                   <input 
                     type="text" 
                     className="search-input" 
                     value={textoCustom} 
                     onChange={e => setTextoCustom(e.target.value)}
-                    placeholder="Escribe una opción y pulsa Enter..."
-                    style={{ margin: 0, flex: 1, border: '2px solid var(--accent-yellow)' }}
+                    placeholder="Ej. Tema 1"
+                    style={{ margin: 0, flex: 1, border: '2px solid var(--accent-yellow)', minWidth: 0 }}
                   />
                   <button type="submit" className="pill-btn hover-opacity" style={{ backgroundColor: 'var(--accent-yellow)', color: '#000', fontWeight: 'bold', padding: '0 1.2rem' }}>
                     Añadir
                   </button>
                 </form>
 
+                {/* Caja de píldoras con SCROLL INTERNO INDEPENDIENTE */}
                 {opciones.length > 0 && (
-                  <div className="custom-scrollbar" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem', maxHeight: '180px', overflowY: 'auto', padding: '0.8rem', backgroundColor: 'var(--bg-app)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                  <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem', padding: '0.8rem', backgroundColor: 'var(--bg-app)', borderRadius: '12px', border: '1px solid var(--border-color)', alignContent: 'flex-start' }}>
                     {opciones.map(op => (
                       <span key={op.id} style={{ backgroundColor: 'var(--bg-input)', padding: '0.3rem 0.8rem', borderRadius: '50px', fontSize: '0.85rem', color: 'var(--text-main)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         {op.texto}
@@ -208,27 +209,35 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
                 )}
                 
                 {opciones.length > 0 && (
-                  <button onClick={limpiarCustom} className="pill-btn" style={{ width: '100%', backgroundColor: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none', fontWeight: 'bold' }}>
+                  <button onClick={limpiarCustom} className="pill-btn" style={{ width: '100%', backgroundColor: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none', fontWeight: 'bold', flexShrink: 0 }}>
                     🗑 Vaciar Ruleta
                   </button>
                 )}
               </div>
             )}
 
-            <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)', fontSize: '1.2rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem' }}>🏆 Historial de Ganadores</h3>
-            {historialGanadores.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>Aún no hay seleccionados.</p>
-            ) : (
-              <ol style={{ paddingLeft: '1.2rem', margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                {historialGanadores.map((ganadorHist, i) => (
-                  <li key={i} style={{ backgroundColor: 'var(--bg-input)', padding: '0.6rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontWeight: 'bold', wordBreak: 'break-word' }}>
-                    {ganadorHist.texto}
-                  </li>
-                ))}
-              </ol>
-            )}
+            {/* ZONA 2: GANADORES (Se estira para usar el espacio restante con SCROLL INTERNO INDEPENDIENTE) */}
+            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+              <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)', fontSize: '1.1rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem', flexShrink: 0 }}>🏆 Historial de Ganadores</h3>
+              
+              <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
+                {historialGanadores.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic', margin: 0 }}>Aún no hay seleccionados.</p>
+                ) : (
+                  <ol style={{ paddingLeft: '1.2rem', margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    {historialGanadores.map((ganadorHist, i) => (
+                      <li key={i} style={{ backgroundColor: 'var(--bg-input)', padding: '0.6rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontWeight: 'bold', wordBreak: 'break-word' }}>
+                        {ganadorHist.texto}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </div>
+
           </div>
 
+          {/* ÁREA CENTRAL DE LA RULETA */}
           <div className="ruleta-centro-area">
             {ganador && (
               <div className="confetti-container">
@@ -258,7 +267,6 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
                   style={{ background: `conic-gradient(${conicGradientString})`, transform: `rotate(${rotacion}deg)`, transitionDuration: '4s', border: '8px solid var(--bg-panel)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}
                 >
                   {opciones.map((op, i) => {
-                    // CORRECCIÓN MAGISTRAL: El "- 90" alinea perfectamente el texto con el gradiente cónico en CSS
                     const rot = (360 / opciones.length) * i + (360 / opciones.length) / 2 - 90;
                     const size = opciones.length > 40 ? '10px' : opciones.length > 25 ? '12px' : '15px';
 
