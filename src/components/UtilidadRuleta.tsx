@@ -160,9 +160,20 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
     
     const indiceGanador = Math.floor(Math.random() * opciones.length);
     const gradosPorPedazo = 360 / opciones.length;
-    const gradosParada = 1800 + (360 - (indiceGanador * gradosPorPedazo)) - (gradosPorPedazo / 2);
     
-    const nuevaRotacion = rotacion + gradosParada;
+    // CORRECCIÓN MATEMÁTICA: Calculamos cuánto le falta a la rueda partiendo de su rotación actual
+    const centroSlice = (indiceGanador * gradosPorPedazo) + (gradosPorPedazo / 2);
+    const rotacionActualMod = rotacion % 360;
+    const rotacionObjetivo = 360 - centroSlice;
+    
+    let gradosGiro = rotacionObjetivo - rotacionActualMod;
+    if (gradosGiro <= 0) {
+      gradosGiro += 360; 
+    }
+    
+    // Añadimos 5 vueltas extras (1800 grados) para el efecto visual de girar
+    const nuevaRotacion = rotacion + gradosGiro + 1800;
+    
     setRotacion(nuevaRotacion);
 
     setTimeout(() => {
@@ -188,21 +199,28 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
   }
 
   return (
-    <div style={{ animation: 'fadeIn 0.3s', minHeight: '100vh', backgroundColor: 'var(--bg-app)', display: 'flex', flexDirection: 'column' }}>
+    <div className="fullscreen-bg" style={{ animation: 'fadeIn 0.3s', display: 'flex', flexDirection: 'column' }}>
       
-      {/* MAGIA UX CSS: Diseño Responsivo Extremo */}
+      {/* CSS: Reordenamiento Inteligente en Móviles */}
       <style>{`
         .ruleta-layout {
           display: flex;
           flex-direction: column;
-          gap: 2rem;
+          gap: 1.5rem;
           padding: 1rem;
         }
         
-        /* ORDEN MÓVIL: La ruleta va primero, luego las opciones, luego ganadores */
-        .col-ruleta { order: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
-        .col-opciones { order: 2; }
-        .col-ganadores { order: 3; }
+        /* ORDEN MÓVIL POR DEFECTO (Grupos) */
+        .ruleta-layout.modo-grupo .col-ruleta { order: 1; }
+        .ruleta-layout.modo-grupo .col-ganadores { order: 2; }
+        .ruleta-layout.modo-grupo .col-opciones { order: 3; }
+
+        /* ORDEN MÓVIL PERSONALIZADO */
+        .ruleta-layout.modo-custom .col-ruleta { order: 1; }
+        .ruleta-layout.modo-custom .col-opciones { order: 2; }
+        .ruleta-layout.modo-custom .col-ganadores { order: 3; }
+
+        .col-ruleta { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
 
         .panel-ruleta {
           background-color: var(--bg-panel);
@@ -211,7 +229,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
           display: flex;
           flex-direction: column;
           box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-          max-height: 500px; /* Evita que en celular se vuelva infinita */
+          max-height: 500px;
           overflow-y: auto;
         }
         
@@ -224,7 +242,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
           z-index: 10;
         }
 
-        /* ORDEN DESKTOP: Cuadrícula de 3 columnas fijas */
+        /* GRID DESKTOP FIJO */
         @media (min-width: 1024px) {
           .ruleta-layout {
             display: grid;
@@ -232,8 +250,14 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
             align-items: start;
             padding: 0 2rem 2rem 2rem;
           }
-          .col-ruleta, .col-opciones, .col-ganadores { order: unset; }
-          
+          .ruleta-layout.modo-grupo .col-ruleta,
+          .ruleta-layout.modo-grupo .col-ganadores,
+          .ruleta-layout.modo-grupo .col-opciones,
+          .ruleta-layout.modo-custom .col-ruleta,
+          .ruleta-layout.modo-custom .col-ganadores,
+          .ruleta-layout.modo-custom .col-opciones {
+            order: unset !important;
+          }
           .panel-ruleta {
             position: sticky;
             top: 20px;
@@ -268,21 +292,23 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           {opciones.length > 0 && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-input)', padding: '0.6rem 1rem', borderRadius: '50px', fontSize: '0.9rem', border: '1px solid var(--border-color)', fontWeight: 'bold', color: 'var(--text-main)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={removerGanador} onChange={e => setRemoverGanador(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> Remover al ganar
-            </label>
+            <TutorialTooltip mensaje="Si está activo, el ganador desaparecerá de la ruleta para no repetirse." posicion="bottom">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-input)', padding: '0.6rem 1rem', borderRadius: '50px', fontSize: '0.9rem', border: '1px solid var(--border-color)', fontWeight: 'bold', color: 'var(--text-main)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={removerGanador} onChange={e => setRemoverGanador(e.target.checked)} style={{ transform: 'scale(1.2)' }} /> Remover al ganar
+              </label>
+            </TutorialTooltip>
           )}
         </div>
       </div>
 
       {cargando ? <div className="loader" style={{marginTop: '5rem'}}></div> : (
-        <div className="ruleta-layout">
+        <div className={`ruleta-layout ${modo === 'grupo' ? 'modo-grupo' : 'modo-custom'}`}>
           
           {/* COLUMNA 1: PANEL DE OPCIONES */}
           <div className="col-opciones panel-ruleta custom-scrollbar">
             <div className="panel-header" style={{ borderTopLeftRadius: '24px', borderTopRightRadius: '24px' }}>
               <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>📝 Elementos ({opciones.length})</h3>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Lista de participantes u opciones en juego.</p>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Lista de opciones en juego.</p>
             </div>
             
             <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -293,7 +319,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
                     className="search-input" 
                     value={textoCustom} 
                     onChange={e => setTextoCustom(e.target.value)}
-                    placeholder="Ej. Exponer Tema 1..."
+                    placeholder="Ej. Tema 1..."
                     style={{ margin: 0, flex: 1, border: '2px solid var(--accent-yellow)', minWidth: 0 }}
                   />
                   <button type="submit" className="pill-btn hover-opacity" style={{ backgroundColor: 'var(--accent-yellow)', color: '#000', fontWeight: 'bold', padding: '0 1.2rem' }}>Añadir</button>
@@ -325,7 +351,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
               <button onClick={() => setTema('pastel')} style={{ padding: '0.4rem 1.2rem', borderRadius: '50px', border: 'none', cursor: 'pointer', fontWeight: 'bold', background: tema === 'pastel' ? '#BAE1FF' : 'transparent', color: tema === 'pastel' ? '#333' : 'var(--text-muted)', transition: 'all 0.2s' }}>Pastel</button>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', position: 'relative', marginBottom: '2rem' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', position: 'relative', marginBottom: '2rem' }}>
               {ganador && (
                 <div className="confetti-container">
                   {Array.from({ length: 50 }).map((_, i) => (
@@ -343,7 +369,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
                   >
                     {opciones.map((op, i) => {
                       const rot = (360 / opciones.length) * i + (360 / opciones.length) / 2 - 90;
-                      const size = opciones.length > 40 ? '10px' : opciones.length > 25 ? '12px' : '15px';
+                      const size = opciones.length > 40 ? '10px' : opciones.length > 25 ? '12px' : '16px';
 
                       return (
                         <div key={op.id} style={{ position: 'absolute', top: '50%', left: '50%', width: '50%', transformOrigin: '0 0', transform: `rotate(${rot}deg)` }}>
@@ -359,7 +385,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem 0' }}>
                   <span style={{ fontSize: '4rem', display: 'block', marginBottom: '1rem', opacity: 0.5 }}>🎡</span>
                   <h2>Ruleta Vacía</h2>
-                  <p>Agrega opciones en el panel de elementos.</p>
+                  <p>Agrega opciones en el panel.</p>
                 </div>
               )}
             </div>
