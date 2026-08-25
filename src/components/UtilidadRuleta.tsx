@@ -75,14 +75,27 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
     setGrupoSeleccionado('');
   };
 
-  const aplicarListaCustom = () => {
-    const lineas = textoCustom.split('\n').map(l => l.trim()).filter(l => l !== '');
-    if (lineas.length === 0) return;
-    const nuevasOpciones = lineas.map((linea, index) => ({ id: `custom-${Date.now()}-${index}`, texto: linea }));
-    setOpciones(nuevasOpciones);
+  // NUEVA LÓGICA ERGONÓMICA PARA AGREGAR OPCIONES CUSTOM
+  const agregarOpcionCustom = (e: React.FormEvent) => {
+    e.preventDefault();
+    const txt = textoCustom.trim();
+    if (!txt) return;
+    
+    setOpciones(prev => [...prev, { id: `custom-${Date.now()}`, texto: txt }]);
+    setTextoCustom(''); // Limpiar el input automáticamente
     setGanador(null);
-    setHistorialGanadores([]);
-    setTextoCustom('');
+  };
+
+  const eliminarOpcionCustom = (id: string) => {
+    setOpciones(prev => prev.filter(o => o.id !== id));
+  };
+
+  const limpiarCustom = () => {
+    if(window.confirm("¿Vaciar toda la ruleta personalizada?")) {
+      setOpciones([]);
+      setGanador(null);
+      setHistorialGanadores([]);
+    }
   };
 
   const reproducirVictoria = () => {
@@ -132,7 +145,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
   return (
     <div className="fullscreen-bg" style={{ animation: 'fadeIn 0.3s' }}>
       
-      {/* HEADER MEJORADO UX */}
+      {/* HEADER */}
       <div style={{ flexShrink: 0, display: 'flex', gap: '1rem', padding: '1.5rem', width: '100%', backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--border-color)', alignItems: 'center', flexWrap: 'wrap', zIndex: 100, borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px', marginBottom: '1rem' }}>
         <button onClick={onVolver} className="pill-btn" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}>← Salir</button>
         
@@ -163,17 +176,42 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
         <div className="ruleta-grid-layout">
           
           <div className="ruleta-lista-area" style={{ backgroundColor: 'var(--bg-panel)', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
+            
+            {/* PANEL CUSTOM ERGONÓMICO */}
             {modo === 'custom' && (
               <div style={{ marginBottom: '1.5rem', width: '100%' }}>
-                <h3 style={{ margin: '0 0 0.8rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>📝 Opciones Personalizadas</h3>
-                <textarea 
-                  className="search-input" 
-                  value={textoCustom} 
-                  onChange={e => setTextoCustom(e.target.value)}
-                  placeholder="Escribe una opción por línea...&#10;Ejemplo:&#10;Exponer Tema 1&#10;Revisar Tarea&#10;Dinámica de grupo"
-                  style={{ minHeight: '150px', resize: 'vertical', marginBottom: '0.8rem', fontSize: '1rem', width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)' }}
-                />
-                <button onClick={aplicarListaCustom} className="pill-btn" style={{ width: '100%', backgroundColor: 'var(--accent-yellow)', color: '#000', fontWeight: 'bold' }}>Agregar a la ruleta</button>
+                <h3 style={{ margin: '0 0 0.8rem 0', color: 'var(--accent-yellow)', fontSize: '1.2rem' }}>📝 Elementos de la Ruleta</h3>
+                
+                <form onSubmit={agregarOpcionCustom} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <input 
+                    type="text" 
+                    className="search-input" 
+                    value={textoCustom} 
+                    onChange={e => setTextoCustom(e.target.value)}
+                    placeholder="Escribe una opción y pulsa Enter..."
+                    style={{ margin: 0, flex: 1, border: '2px solid var(--accent-yellow)' }}
+                  />
+                  <button type="submit" className="pill-btn hover-opacity" style={{ backgroundColor: 'var(--accent-yellow)', color: '#000', fontWeight: 'bold', padding: '0 1.2rem' }}>
+                    Añadir
+                  </button>
+                </form>
+
+                {opciones.length > 0 && (
+                  <div className="custom-scrollbar" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem', maxHeight: '180px', overflowY: 'auto', padding: '0.8rem', backgroundColor: 'var(--bg-app)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    {opciones.map(op => (
+                      <span key={op.id} style={{ backgroundColor: 'var(--bg-input)', padding: '0.3rem 0.8rem', borderRadius: '50px', fontSize: '0.85rem', color: 'var(--text-main)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {op.texto}
+                        <button type="button" onClick={() => eliminarOpcionCustom(op.id)} style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', padding: 0, fontSize: '1.1rem', lineHeight: 1 }}>✖</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                
+                {opciones.length > 0 && (
+                  <button onClick={limpiarCustom} className="pill-btn" style={{ width: '100%', backgroundColor: 'rgba(255, 77, 79, 0.1)', color: 'var(--accent-red)', border: 'none', fontWeight: 'bold' }}>
+                    🗑 Vaciar Ruleta
+                  </button>
+                )}
               </div>
             )}
 
@@ -207,7 +245,7 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
                 </h1>
               ) : (
                 <h2 style={{ color: 'var(--text-muted)', textAlign: 'center', fontSize: 'clamp(1.2rem, 3vw, 1.5rem)', margin: 0 }}>
-                  {modo === 'grupo' ? '👆 Selecciona un grupo arriba' : '👆 Ingresa opciones en el panel'}
+                  {modo === 'grupo' ? '👆 Selecciona un grupo arriba' : '👆 Ingresa opciones en el panel izquierdo'}
                 </h2>
               )}
             </div>
@@ -220,7 +258,8 @@ export default function UtilidadRuleta({ onVolver }: { onVolver: () => void }) {
                   style={{ background: `conic-gradient(${conicGradientString})`, transform: `rotate(${rotacion}deg)`, transitionDuration: '4s', border: '8px solid var(--bg-panel)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}
                 >
                   {opciones.map((op, i) => {
-                    const rot = (360 / opciones.length) * i + (360 / opciones.length) / 2;
+                    // CORRECCIÓN MAGISTRAL: El "- 90" alinea perfectamente el texto con el gradiente cónico en CSS
+                    const rot = (360 / opciones.length) * i + (360 / opciones.length) / 2 - 90;
                     const size = opciones.length > 40 ? '10px' : opciones.length > 25 ? '12px' : '15px';
 
                     return (
