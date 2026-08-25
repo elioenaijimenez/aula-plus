@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
+import type {
   ContextoEscuela,
   ContextoEscuelaCampos,
+} from '../services/planeacionContextService';
+import {
   calcularEstadoContextoEscuela,
   cargarContextoEscuela,
   crearContextoEscuelaVacio,
